@@ -52,10 +52,10 @@ function proxyUrl(url: string, headers?: Record<string, string>): string {
   const params = new URLSearchParams();
   params.set('url', url);
 
-  const referer = headers?.Referer || headers?.referer;
-  const ua = headers?.['User-Agent'] || headers?.['user-agent'];
-  if (referer) params.set('referer', referer);
-  if (ua) params.set('ua', ua);
+  if (headers && Object.keys(headers).length > 0) {
+    // Pass all headers as JSON-encoded parameter
+    params.set('headers', JSON.stringify(headers));
+  }
 
   return `/api/proxy?${params.toString()}`;
 }
