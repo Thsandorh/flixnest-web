@@ -291,25 +291,15 @@ export function VideoPlayer({
         v.src = url;
       };
 
-      // Check if this is a proxied URL or HLS source
-      const isProxiedUrl = finalUrl.startsWith('/api/proxy');
-      const isHlsSource = isHls(finalUrl);
-
-      // For proxied URLs, always try HLS.js first (WebStreamr returns HLS)
-      if (isProxiedUrl || isHlsSource) {
-        if (setupHls(finalUrl)) {
-          return;
-        }
-        console.warn('[HLS] Failed to setup, trying alternatives...');
-      }
-
-      // Try Shaka for non-HLS sources (best codec support)
+      // Try Shaka Player first for ALL sources (best codec and format support, including HLS/M3U8)
       try {
+        addLog('Attempting Shaka Player...');
         const shakaModule = await import('shaka-player/dist/shaka-player.compiled');
         const shaka = shakaModule.default || shakaModule;
 
         shaka.polyfill.installAll();
         if (shaka.Player.isBrowserSupported()) {
+          addLog('Shaka Player browser supported');
           const player = new shaka.Player(v);
           shakaRef.current = player;
 
@@ -332,24 +322,48 @@ export function VideoPlayer({
 
           player.addEventListener('error', async (event: any) => {
             const error = event?.detail;
+            addLog(`Shaka error: ${error?.code} - ${error?.message}`);
             console.error('[SHAKA] Error:', error);
 
             if (error?.code === 4032 || error?.code === 1001 || error?.severity === 2) {
+              addLog('Fatal Shaka error, falling back...');
               await destroyShaka();
               fallbackToNative(finalUrl);
             }
           });
 
           try {
+            addLog('Loading source with Shaka Player...');
             await player.load(finalUrl);
+            addLog('Shaka Player loaded successfully!');
+            if (startTime > 0) {
+              v.currentTime = startTime;
+            }
             return;
-          } catch (loadError) {
+          } catch (loadError: any) {
+            addLog(`Shaka load failed: ${loadError?.message || loadError}`);
             console.warn('[SHAKA] Load error, falling back:', loadError);
             await destroyShaka();
           }
+        } else {
+          addLog('Shaka Player not supported in this browser');
         }
-      } catch (e) {
+      } catch (e: any) {
+        addLog(`Shaka error: ${e?.message || e}`);
         console.warn('[SHAKA] Not available, falling back');
+      }
+
+      // Check if this is a proxied URL or HLS source
+      const isProxiedUrl = finalUrl.startsWith('/api/proxy');
+      const isHlsSource = isHls(finalUrl);
+
+      // Fallback to HLS.js for HLS/M3U8 sources if Shaka failed
+      if (isProxiedUrl || isHlsSource) {
+        addLog('Trying HLS.js as fallback...');
+        if (setupHls(finalUrl)) {
+          return;
+        }
+        addLog('HLS.js failed, trying native...');
       }
 
       fallbackToNative(finalUrl);
