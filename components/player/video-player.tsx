@@ -205,6 +205,19 @@ export function VideoPlayer({
       if (/^https?:\/\//i.test(finalUrl)) {
         finalUrl = proxyUrl(finalUrl, headers);
         addLog(`Proxied URL: ${finalUrl.substring(0, 60)}...`);
+
+        // Debug: fetch and check what proxy returns
+        try {
+          const debugResp = await fetch(finalUrl);
+          const debugText = await debugResp.text();
+          addLog(`Proxy response: ${debugResp.status}`);
+          addLog(`Content starts with: ${debugText.substring(0, 100)}`);
+          if (!debugText.startsWith('#EXTM3U')) {
+            addLog('WARNING: Not a valid M3U8!');
+          }
+        } catch (e: any) {
+          addLog(`Fetch error: ${e.message}`);
+        }
       }
 
       v.pause();
