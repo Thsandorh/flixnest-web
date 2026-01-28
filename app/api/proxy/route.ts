@@ -130,6 +130,8 @@ export async function GET(request: NextRequest) {
     } else if (isM3u8Url || isM3u8Content || contentType.includes('text/')) {
       // Handle m3u8 playlists - need to proxy URLs inside them
       const text = await response.text();
+      console.log('[Proxy] Content-Type:', contentType);
+      console.log('[Proxy] Response text (first 500 chars):', text.substring(0, 500));
 
       // If it's an m3u8 file, proxy the URLs inside
       if (isM3u8Url || isM3u8Content) {
