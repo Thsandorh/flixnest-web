@@ -189,6 +189,8 @@ export function VideoPlayer({
     if (!v) return;
 
     const setupPlayback = async () => {
+      console.log('[Player] Setting up playback for:', src);
+      console.log('[Player] Headers:', headers);
       destroyHls();
       await destroyShaka();
 
@@ -197,6 +199,8 @@ export function VideoPlayer({
       if (/^https?:\/\//i.test(finalUrl)) {
         finalUrl = proxyUrl(finalUrl, headers);
       }
+      console.log('[Player] Final URL:', finalUrl);
+      console.log('[Player] isHls:', isHls(finalUrl));
 
       v.pause();
       v.removeAttribute('src');
@@ -204,18 +208,30 @@ export function VideoPlayer({
 
       // Define helper functions first
       const setupHls = (url: string) => {
+        console.log('[HLS] Setting up with URL:', url);
         if (Hls.isSupported()) {
-          const hls = new Hls();
+          console.log('[HLS] hls.js is supported');
+          const hls = new Hls({
+            debug: true,
+            enableWorker: true,
+            xhrSetup: (xhr, xhrUrl) => {
+              console.log('[HLS] XHR request to:', xhrUrl);
+            },
+          });
           hlsRef.current = hls;
           hls.loadSource(url);
           hls.attachMedia(v);
-          hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          hls.on(Hls.Events.MANIFEST_PARSED, (event, data) => {
+            console.log('[HLS] Manifest parsed, levels:', data.levels?.length);
             if (startTime > 0) {
               v.currentTime = startTime;
             }
           });
+          hls.on(Hls.Events.MANIFEST_LOADED, (event, data) => {
+            console.log('[HLS] Manifest loaded:', data.url);
+          });
           hls.on(Hls.Events.ERROR, (_evt, data) => {
-            console.warn('[HLS] error:', data?.type, data?.details, data?.response?.code);
+            console.error('[HLS] error:', data?.type, data?.details, data?.response?.code, data);
 
             if (data.fatal) {
               switch (data.type) {
