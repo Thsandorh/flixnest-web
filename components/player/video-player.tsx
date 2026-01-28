@@ -224,6 +224,19 @@ export function VideoPlayer({
       v.removeAttribute('src');
       v.load();
 
+      const fallbackToNative = (url: string) => {
+        if (isHls(url)) {
+          if (setupHls(url)) return;
+        }
+
+        if (isDash(url)) {
+          v.src = url;
+          return;
+        }
+
+        v.src = url;
+      };
+
       // Define helper functions first
       const setupHls = (url: string) => {
         addLog(`Setting up HLS for: ${url.substring(0, 50)}...`);
@@ -248,7 +261,14 @@ export function VideoPlayer({
           hls.on(Hls.Events.ERROR, (_evt, data) => {
             addLog(`HLS ERROR: ${data?.type} - ${data?.details} - ${data?.response?.code || 'no code'}`);
 
-            if (data.fatal) {
+            if (data?.fatal) {
+              if (data.details === Hls.ErrorDetails.MANIFEST_PARSING_ERROR) {
+                addLog('Manifest parsing failed, falling back to native');
+                destroyHls();
+                fallbackToNative(url);
+                return;
+              }
+
               switch (data.type) {
                 case Hls.ErrorTypes.NETWORK_ERROR:
                   addLog('Fatal network error, retrying...');
@@ -276,19 +296,6 @@ export function VideoPlayer({
 
         addLog('HLS not supported');
         return false;
-      };
-
-      const fallbackToNative = (url: string) => {
-        if (isHls(url)) {
-          if (setupHls(url)) return;
-        }
-
-        if (isDash(url)) {
-          v.src = url;
-          return;
-        }
-
-        v.src = url;
       };
 
       // Check if this is a proxied URL or HLS source
