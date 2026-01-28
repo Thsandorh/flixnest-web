@@ -1,0 +1,18 @@
+
+> flixnest@2.0.0 dev
+> next dev
+
+Error: spawn EPERM
+    at ChildProcess.spawn (node:internal/child_process:420:11)
+    at spawn (node:child_process:754:9)
+    at fork (node:child_process:172:10)
+    at e:\Projects\flixnest\node_modules\next\dist\cli\next-dev.js:233:45
+    at new Promise (<anonymous>)
+    at startServer (e:\Projects\flixnest\node_modules\next\dist\cli\next-dev.js:219:16)
+    at runDevServer (e:\Projects\flixnest\node_modules\next\dist\cli\next-dev.js:300:23)
+    at nextDev (e:\Projects\flixnest\node_modules\next\dist\cli\next-dev.js:308:11)
+    at async main (e:\Projects\flixnest\node_modules\next\dist\bin\next:155:5) {
+  errno: -4048,
+  code: 'EPERM',
+  syscall: 'spawn'
+}
