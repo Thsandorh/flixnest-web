@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from 'next/server';
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const url = searchParams.get('url');
+  const headersParam = searchParams.get('headers');
+  // Legacy support for old referer/ua params
   const refererParam = searchParams.get('referer') || '';
   const uaParam = searchParams.get('ua') || '';
 
@@ -27,15 +29,39 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Parse custom headers from JSON parameter
+    let customHeaders: Record<string, string> = {};
+    if (headersParam) {
+      try {
+        customHeaders = JSON.parse(headersParam);
+      } catch {
+        // Invalid JSON, ignore
+      }
+    }
+
     // Prepare headers for the upstream request
     const upstreamHeaders: HeadersInit = {
       'User-Agent':
+        customHeaders['User-Agent'] ||
+        customHeaders['user-agent'] ||
         uaParam ||
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       'Accept': request.headers.get('accept') || '*/*',
       'Accept-Language': 'en-US,en;q=0.9',
-      'Referer': refererParam || targetUrl.origin,
+      'Referer':
+        customHeaders['Referer'] ||
+        customHeaders['referer'] ||
+        refererParam ||
+        targetUrl.origin,
     };
+
+    // Add any other custom headers (excluding ones we've already set)
+    const excludedHeaders = ['user-agent', 'accept', 'accept-language', 'referer', 'host', 'connection'];
+    for (const [key, value] of Object.entries(customHeaders)) {
+      if (!excludedHeaders.includes(key.toLowerCase()) && value) {
+        upstreamHeaders[key] = value;
+      }
+    }
 
     // Forward Range header if present (for video seeking)
     const rangeHeader = request.headers.get('range');
@@ -111,8 +137,13 @@ export async function GET(request: NextRequest) {
 
           const params = new URLSearchParams();
           params.set('url', absoluteUrl);
-          if (refererParam) params.set('referer', refererParam);
-          if (uaParam) params.set('ua', uaParam);
+          // Pass headers as JSON if available, otherwise fall back to legacy params
+          if (headersParam) {
+            params.set('headers', headersParam);
+          } else {
+            if (refererParam) params.set('referer', refererParam);
+            if (uaParam) params.set('ua', uaParam);
+          }
           return `/api/proxy?${params.toString()}`;
         };
 
@@ -187,6 +218,7 @@ export async function HEAD(request: NextRequest) {
   // Handle HEAD requests for video metadata
   const searchParams = request.nextUrl.searchParams;
   const url = searchParams.get('url');
+  const headersParam = searchParams.get('headers');
   const refererParam = searchParams.get('referer') || '';
   const uaParam = searchParams.get('ua') || '';
 
@@ -196,13 +228,30 @@ export async function HEAD(request: NextRequest) {
 
   try {
     const decodedUrl = decodeURIComponent(url);
+
+    // Parse custom headers from JSON parameter
+    let customHeaders: Record<string, string> = {};
+    if (headersParam) {
+      try {
+        customHeaders = JSON.parse(headersParam);
+      } catch {
+        // Invalid JSON, ignore
+      }
+    }
+
     const response = await fetch(decodedUrl, {
       method: 'HEAD',
       headers: {
         'User-Agent':
+          customHeaders['User-Agent'] ||
+          customHeaders['user-agent'] ||
           uaParam ||
           'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Referer': refererParam || new URL(decodedUrl).origin,
+        'Referer':
+          customHeaders['Referer'] ||
+          customHeaders['referer'] ||
+          refererParam ||
+          new URL(decodedUrl).origin,
       },
     });
 
