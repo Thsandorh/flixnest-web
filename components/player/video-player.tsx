@@ -87,10 +87,8 @@ export function VideoPlayer({
 
     addLog('Setting up player...');
 
-    let finalUrl = src;
-    if (/^https?:\/\//i.test(finalUrl)) {
-      finalUrl = proxyUrl(finalUrl, headers);
-    }
+    // Use URL directly - no proxy needed if CORS allows it
+    const finalUrl = src;
     addLog(`URL: ${finalUrl.substring(0, 70)}...`);
 
     // Check if it's HLS
