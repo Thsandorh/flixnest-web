@@ -25,11 +25,12 @@ interface VideoPlayerProps {
 }
 
 function isHls(url: string): boolean {
-  if (/\.m3u8(\?.*)?$/i.test(url)) return true;
+  // Check if URL contains .m3u8 anywhere (not just at the end)
+  if (url.toLowerCase().includes('.m3u8')) return true;
   try {
     const u = new URL(url, typeof window !== 'undefined' ? window.location.origin : 'http://localhost');
     const inner = u.searchParams.get('url');
-    if (inner && /\.m3u8(\?.*)?$/i.test(inner)) return true;
+    if (inner && inner.toLowerCase().includes('.m3u8')) return true;
   } catch {}
   return false;
 }
@@ -257,15 +258,19 @@ export function VideoPlayer({
         v.src = url;
       };
 
-      // Prefer HLS.js for HLS sources (Shaka can fail on TS playlists)
-      if (isHls(finalUrl)) {
-        if (!setupHls(finalUrl)) {
-          console.warn('[HLS] not supported in this browser');
+      // Check if this is a proxied URL or HLS source
+      const isProxiedUrl = finalUrl.startsWith('/api/proxy');
+      const isHlsSource = isHls(finalUrl);
+
+      // For proxied URLs, always try HLS.js first (WebStreamr returns HLS)
+      if (isProxiedUrl || isHlsSource) {
+        if (setupHls(finalUrl)) {
+          return;
         }
-        return;
+        console.warn('[HLS] Failed to setup, trying alternatives...');
       }
 
-      // Try Shaka first (best codec support)
+      // Try Shaka for non-HLS sources (best codec support)
       try {
         const shakaModule = await import('shaka-player/dist/shaka-player.compiled');
         const shaka = shakaModule.default || shakaModule;
