@@ -138,6 +138,9 @@ export async function GET(request: NextRequest) {
         const baseUrl = decodedUrl.substring(0, decodedUrl.lastIndexOf('/') + 1);
         const urlOrigin = targetUrl.origin;
 
+        // Normalize line endings (handle \r\n, \r, and \n)
+        const normalizedText = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
         // Helper to build an absolute URL and wrap it with our proxy
         const toProxiedUrl = (rawUrl: string) => {
           const cleaned = rawUrl.trim();
@@ -177,7 +180,7 @@ export async function GET(request: NextRequest) {
           return `/api/proxy?${params.toString()}`;
         };
 
-        const proxiedM3u8 = text
+        const proxiedM3u8 = normalizedText
           .split('\n')
           .map((line) => {
             const trimmed = line.trim();
