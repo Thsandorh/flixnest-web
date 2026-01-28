@@ -40,6 +40,26 @@ function proxyUrl(url: string, headers?: Record<string, string>): string {
   return `/api/proxy?${params.toString()}`;
 }
 
+function inferTypeFromUrl(url: string): string | undefined {
+  const lower = url.toLowerCase();
+  if (lower.includes('.m3u8')) return 'application/x-mpegURL';
+  if (lower.includes('.mp4')) return 'video/mp4';
+  if (lower.includes('.webm')) return 'video/webm';
+  if (lower.includes('.mkv')) return 'video/x-matroska';
+  if (lower.includes('.mov')) return 'video/quicktime';
+  if (lower.includes('.m4v')) return 'video/x-m4v';
+  return undefined;
+}
+
+function normalizeContentType(contentType: string | null, url: string): string | undefined {
+  if (!contentType) return inferTypeFromUrl(url);
+  const trimmed = contentType.split(';')[0].trim();
+  if (trimmed === 'application/octet-stream' || trimmed === 'binary/octet-stream' || trimmed === 'text/plain') {
+    return inferTypeFromUrl(url);
+  }
+  return trimmed || inferTypeFromUrl(url);
+}
+
 export function VideoPlayer({
   src,
   poster,
@@ -200,7 +220,8 @@ export function VideoPlayer({
       }
 
       if (recoveryRef.current.attempts <= 2) {
-        player.src({ src: currentSrc, type: player.currentType() || 'application/x-mpegURL' });
+        const fallbackType = normalizeContentType(player.currentType() || null, currentSrc);
+        player.src({ src: currentSrc, type: fallbackType });
         player.load();
         const retryPromise = player.play?.();
         if (retryPromise && typeof (retryPromise as Promise<void>).catch === 'function') {
@@ -240,9 +261,12 @@ export function VideoPlayer({
         try {
           const headResp = await fetch(finalUrl, { method: 'HEAD', signal: controller.signal });
           const contentType = headResp.headers.get('content-type');
+          const normalized = normalizeContentType(contentType, finalUrl);
           if (contentType) {
             addLog(`Detected content-type: ${contentType}`);
-            source = { src: finalUrl, type: contentType.split(';')[0] };
+          }
+          if (normalized) {
+            source = { src: finalUrl, type: normalized };
           }
         } catch (error) {
           if (error instanceof Error && error.name !== 'AbortError') {
