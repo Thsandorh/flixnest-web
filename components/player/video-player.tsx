@@ -25,15 +25,30 @@ interface VideoPlayerProps {
 }
 
 function proxyUrl(url: string, headers?: Record<string, string>): string {
-  if (url.startsWith('/api/proxy')) {
-    return url;
-  }
+  if (url.startsWith('/api/proxy')) return url;
   const params = new URLSearchParams();
   params.set('url', url);
   if (headers && Object.keys(headers).length > 0) {
     params.set('headers', JSON.stringify(headers));
   }
   return `/api/proxy?${params.toString()}`;
+}
+
+// Detect if URL is likely an HLS stream
+function isLikelyHls(url: string): boolean {
+  const lower = url.toLowerCase();
+  if (lower.includes('.m3u8')) return true;
+  if (lower.includes('playlist')) return true;
+  if (lower.includes('/hls/')) return true;
+  // Common streaming domains that use HLS
+  if (lower.includes('vixsrc') || lower.includes('fsl-cdn')) return true;
+  return false;
+}
+
+// Detect if URL is a direct video file
+function isDirectVideo(url: string): boolean {
+  const lower = url.toLowerCase();
+  return lower.includes('.mp4') || lower.includes('.webm') || lower.includes('.mkv') || lower.includes('.avi');
 }
 
 export function VideoPlayer({
@@ -74,7 +89,6 @@ export function VideoPlayer({
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  // Initialize player
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -84,71 +98,96 @@ export function VideoPlayer({
       hlsRef.current.destroy();
       hlsRef.current = null;
     }
+    video.src = '';
 
     addLog('Setting up player...');
+    addLog(`Source: ${src.substring(0, 60)}...`);
 
-    // Use URL directly - no proxy needed if CORS allows it
-    const finalUrl = src;
-    addLog(`URL: ${finalUrl.substring(0, 70)}...`);
+    const isHls = isLikelyHls(src);
+    const isDirect = isDirectVideo(src);
 
-    // Check if it's HLS
-    const isHls = finalUrl.includes('.m3u8') || finalUrl.includes('/api/proxy');
+    // For direct video files (mp4, etc), try without proxy first
+    if (isDirect) {
+      addLog('Direct video file detected');
+      video.src = src;
+      video.load();
+      return;
+    }
 
-    if (isHls && Hls.isSupported()) {
-      addLog('Using HLS.js');
-      const hls = new Hls({
-        debug: false,
-        enableWorker: true,
-        lowLatencyMode: false,
-        backBufferLength: 90,
-        maxBufferLength: 30,
-        maxMaxBufferLength: 600,
-      });
-      hlsRef.current = hls;
+    // For HLS streams
+    if (isHls) {
+      if (Hls.isSupported()) {
+        addLog('Using HLS.js');
 
-      hls.on(Hls.Events.MANIFEST_PARSED, (_event, data) => {
-        addLog(`Manifest parsed, ${data.levels.length} quality levels`);
-        if (startTime > 0) video.currentTime = startTime;
-      });
+        // Try direct URL first, fall back to proxy if needed
+        const tryWithUrl = (url: string, isProxy: boolean) => {
+          const hls = new Hls({
+            debug: false,
+            enableWorker: true,
+            lowLatencyMode: false,
+            backBufferLength: 90,
+            maxBufferLength: 30,
+            maxMaxBufferLength: 600,
+            xhrSetup: (xhr) => {
+              // Add headers if needed
+              if (headers) {
+                Object.entries(headers).forEach(([key, value]) => {
+                  xhr.setRequestHeader(key, value);
+                });
+              }
+            },
+          });
+          hlsRef.current = hls;
 
-      hls.on(Hls.Events.LEVEL_LOADED, (_event, data) => {
-        addLog(`Level loaded: ${data.details.totalduration?.toFixed(0)}s`);
-      });
+          hls.on(Hls.Events.MANIFEST_PARSED, (_event, data) => {
+            addLog(`Manifest OK, ${data.levels.length} levels`);
+            if (startTime > 0) video.currentTime = startTime;
+          });
 
-      hls.on(Hls.Events.ERROR, (_event, data) => {
-        addLog(`HLS Error: ${data.type} - ${data.details}`);
-        console.error('HLS Error:', data);
+          hls.on(Hls.Events.FRAG_LOADED, () => {
+            addLog('Fragment loaded');
+          });
 
-        if (data.fatal) {
-          switch (data.type) {
-            case Hls.ErrorTypes.NETWORK_ERROR:
-              addLog('Network error, trying to recover...');
-              hls.startLoad();
-              break;
-            case Hls.ErrorTypes.MEDIA_ERROR:
-              addLog('Media error, trying to recover...');
-              hls.recoverMediaError();
-              break;
-            default:
-              addLog('Fatal error, cannot recover');
-              hls.destroy();
-              break;
-          }
-        }
-      });
+          hls.on(Hls.Events.ERROR, (_event, data) => {
+            addLog(`HLS Error: ${data.type} - ${data.details}`);
 
-      hls.loadSource(finalUrl);
-      hls.attachMedia(video);
-      addLog('HLS attached');
+            if (data.fatal) {
+              if (!isProxy && data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+                // Try with proxy
+                addLog('Trying with proxy...');
+                hls.destroy();
+                hlsRef.current = null;
+                tryWithUrl(proxyUrl(src, headers), true);
+              } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+                addLog('Recovering from media error...');
+                hls.recoverMediaError();
+              } else {
+                addLog('Fatal error');
+              }
+            }
+          });
 
-    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      // Safari native HLS
-      addLog('Using native HLS (Safari)');
-      video.src = finalUrl;
+          addLog(`Loading: ${isProxy ? 'via proxy' : 'direct'}`);
+          hls.loadSource(url);
+          hls.attachMedia(video);
+        };
+
+        // Start with direct URL
+        tryWithUrl(src, false);
+
+      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        // Safari native HLS
+        addLog('Using Safari native HLS');
+        video.src = src;
+        video.load();
+      } else {
+        addLog('HLS not supported!');
+      }
     } else {
-      // Direct video
-      addLog('Using direct video source');
-      video.src = finalUrl;
+      // Unknown format - try direct, then proxy
+      addLog('Unknown format, trying direct...');
+      video.src = src;
+      video.load();
     }
 
     // Progress tracking
@@ -206,7 +245,7 @@ export function VideoPlayer({
   const handleError = () => {
     const video = videoRef.current;
     if (video?.error) {
-      addLog(`Video error: ${video.error.code} - ${video.error.message}`);
+      addLog(`Video error: ${video.error.code} - ${video.error.message || 'unknown'}`);
     }
   };
 
@@ -219,6 +258,7 @@ export function VideoPlayer({
           controls
           playsInline
           poster={poster}
+          crossOrigin="anonymous"
           onPlay={handlePlay}
           onPause={handlePause}
           onEnded={handleEnded}
