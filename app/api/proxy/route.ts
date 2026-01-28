@@ -122,10 +122,14 @@ export async function GET(request: NextRequest) {
       // If it's an m3u8 file, proxy the URLs inside
       if (isM3u8Url || isM3u8Content) {
         const baseUrl = decodedUrl.substring(0, decodedUrl.lastIndexOf('/') + 1);
+        const urlOrigin = targetUrl.origin;
 
         // Helper to build an absolute URL and wrap it with our proxy
         const toProxiedUrl = (rawUrl: string) => {
           const cleaned = rawUrl.trim();
+
+          // Skip empty lines
+          if (!cleaned) return cleaned;
 
           // Skip special URI schemes (e.g., data:, skd:, urn:) but keep relative URLs
           if (cleaned.includes(':') && !/^https?:\/\//i.test(cleaned) && !cleaned.startsWith('//')) {
@@ -134,8 +138,16 @@ export async function GET(request: NextRequest) {
 
           let absoluteUrl = cleaned;
           if (cleaned.startsWith('//')) {
+            // Protocol-relative URL
             absoluteUrl = `https:${cleaned}`;
-          } else if (!cleaned.startsWith('http://') && !cleaned.startsWith('https://')) {
+          } else if (cleaned.startsWith('http://') || cleaned.startsWith('https://')) {
+            // Already absolute URL
+            absoluteUrl = cleaned;
+          } else if (cleaned.startsWith('/')) {
+            // Absolute path - use origin
+            absoluteUrl = urlOrigin + cleaned;
+          } else {
+            // Relative path - use base URL
             absoluteUrl = baseUrl + cleaned;
           }
 
