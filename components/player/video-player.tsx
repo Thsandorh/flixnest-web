@@ -239,30 +239,43 @@ export function VideoPlayer({
         addLog(`Setting up HLS for: ${url.substring(0, 50)}...`);
         if (Hls.isSupported()) {
           addLog('HLS.js supported, creating instance');
-          const hls = new Hls();
+          const hls = new Hls({
+            debug: false,
+            enableWorker: true,
+            lowLatencyMode: false,
+            backBufferLength: 90,
+          });
           hlsRef.current = hls;
           hls.loadSource(url);
           hls.attachMedia(v);
           hls.on(Hls.Events.MANIFEST_PARSED, () => {
-            addLog('Manifest parsed OK');
+            addLog('HLS: Manifest parsed OK');
             if (startTime > 0) {
               v.currentTime = startTime;
             }
           });
           hls.on(Hls.Events.MANIFEST_LOADED, () => {
-            addLog('Manifest loaded OK');
+            addLog('HLS: Manifest loaded OK');
           });
           hls.on(Hls.Events.FRAG_LOADED, () => {
-            addLog('Fragment loaded OK');
+            addLog('HLS: Fragment loaded OK');
           });
           hls.on(Hls.Events.ERROR, (_evt, data) => {
             addLog(`HLS ERROR: ${data?.type} - ${data?.details} - ${data?.response?.code || 'no code'}`);
+            console.error('[HLS] Full error data:', data);
 
             if (data.fatal) {
               switch (data.type) {
                 case Hls.ErrorTypes.NETWORK_ERROR:
-                  addLog('Fatal network error, retrying...');
-                  hls.startLoad();
+                  // For manifest parsing errors, don't retry
+                  if (data.details === 'manifestParsingError') {
+                    addLog('Fatal manifest parsing error, falling back to native...');
+                    destroyHls();
+                    fallbackToNative(url);
+                  } else {
+                    addLog('Fatal network error, retrying...');
+                    hls.startLoad();
+                  }
                   break;
                 case Hls.ErrorTypes.MEDIA_ERROR:
                   addLog('Fatal media error, recovering...');
@@ -347,7 +360,14 @@ export function VideoPlayer({
 
           try {
             addLog('Loading source with Shaka Player...');
-            await player.load(finalUrl);
+            // Detect manifest type and pass mime type to help Shaka identify it
+            const manifestMimeType = isHls(finalUrl) || finalUrl.startsWith('/api/proxy')
+              ? 'application/x-mpegURL'
+              : undefined;
+            if (manifestMimeType) {
+              addLog(`Using mime type: ${manifestMimeType}`);
+            }
+            await player.load(finalUrl, 0, manifestMimeType);
             addLog('Shaka Player loaded successfully!');
             if (startTime > 0) {
               v.currentTime = startTime;
