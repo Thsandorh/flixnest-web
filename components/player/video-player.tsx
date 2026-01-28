@@ -30,35 +30,12 @@ function proxyUrl(url: string, headers?: Record<string, string>): string {
   if (url.startsWith('/api/proxy')) {
     return url;
   }
-
   const params = new URLSearchParams();
   params.set('url', url);
-
   if (headers && Object.keys(headers).length > 0) {
     params.set('headers', JSON.stringify(headers));
   }
-
   return `/api/proxy?${params.toString()}`;
-}
-
-function getSourceType(url: string): string {
-  let urlToCheck = url.toLowerCase();
-  try {
-    if (url.includes('/api/proxy')) {
-      const proxyUrl = new URL(url, 'http://localhost');
-      const innerUrl = proxyUrl.searchParams.get('url');
-      if (innerUrl) {
-        urlToCheck = decodeURIComponent(innerUrl).toLowerCase();
-      }
-    }
-  } catch {}
-
-  if (urlToCheck.includes('.m3u8')) return 'application/x-mpegURL';
-  if (urlToCheck.includes('.mpd')) return 'application/dash+xml';
-  if (urlToCheck.includes('.mp4')) return 'video/mp4';
-  if (urlToCheck.includes('.webm')) return 'video/webm';
-  if (url.includes('/api/proxy')) return 'application/x-mpegURL';
-  return 'video/mp4';
 }
 
 export function VideoPlayer({
@@ -79,7 +56,6 @@ export function VideoPlayer({
   const lastProgressRef = useRef<number>(0);
   const [debugLogs, setDebugLogs] = useState<string[]>([]);
 
-  // Store callbacks in refs to avoid re-initialization
   const callbacksRef = useRef({ onProgress, onEnded, onPlay, onPause });
   callbacksRef.current = { onProgress, onEnded, onPlay, onPause };
 
@@ -87,7 +63,6 @@ export function VideoPlayer({
     setDebugLogs(prev => [...prev.slice(-10), `${new Date().toLocaleTimeString()}: ${msg}`]);
   };
 
-  // Detect mobile
   useEffect(() => {
     const checkMobile = () => {
       setIsMobile(
@@ -101,37 +76,25 @@ export function VideoPlayer({
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  // Initialize Video.js - ONLY when src changes
+  // Initialize Video.js
   useEffect(() => {
     if (!containerRef.current) return;
 
-    // Clean up previous player first
-    if (playerRef.current) {
-      playerRef.current.dispose();
-      playerRef.current = null;
-    }
-
-    // Clear container
+    // Clear any existing content
     containerRef.current.innerHTML = '';
 
     addLog('Initializing Video.js...');
 
-    // Build the final URL
     let finalUrl = src;
     if (/^https?:\/\//i.test(finalUrl)) {
       finalUrl = proxyUrl(finalUrl, headers);
-      addLog(`Proxied URL: ${finalUrl.substring(0, 60)}...`);
     }
+    addLog(`URL: ${finalUrl.substring(0, 80)}...`);
 
-    const sourceType = getSourceType(finalUrl);
-    addLog(`Source type: ${sourceType}`);
-
-    // Create video element
     const videoElement = document.createElement('video');
     videoElement.classList.add('video-js', 'vjs-big-play-centered', 'vjs-fluid');
     containerRef.current.appendChild(videoElement);
 
-    // Initialize player
     const player = videojs(videoElement, {
       controls: true,
       autoplay: false,
@@ -142,23 +105,19 @@ export function VideoPlayer({
       html5: {
         vhs: {
           overrideNative: true,
-          enableLowInitialPlaylist: true,
-          smoothQualityChange: true,
-          handleManifestRedirects: true,
         },
         nativeAudioTracks: false,
         nativeVideoTracks: false,
       },
       sources: [{
         src: finalUrl,
-        type: sourceType,
+        type: 'application/x-mpegURL',
       }],
       poster: poster,
     });
 
     playerRef.current = player;
 
-    // Add subtitles
     subtitles.forEach((track, index) => {
       player.addRemoteTextTrack({
         kind: 'subtitles',
@@ -169,12 +128,9 @@ export function VideoPlayer({
       }, false);
     });
 
-    // Event handlers - use ref for callbacks
     player.on('loadedmetadata', () => {
-      addLog('Video metadata loaded');
-      if (startTime > 0) {
-        player.currentTime(startTime);
-      }
+      addLog('Metadata loaded');
+      if (startTime > 0) player.currentTime(startTime);
     });
 
     player.on('play', () => {
@@ -201,15 +157,12 @@ export function VideoPlayer({
     player.on('error', () => {
       const error = player.error();
       addLog(`Error: ${error?.code} - ${error?.message}`);
-      console.error('[Video.js] Error:', error);
     });
 
-    // Progress tracking
     progressIntervalRef.current = setInterval(() => {
       if (playerRef.current && !playerRef.current.paused()) {
         const currentTime = playerRef.current.currentTime() || 0;
         const duration = playerRef.current.duration() || 0;
-
         if (Math.abs(currentTime - lastProgressRef.current) >= 5) {
           lastProgressRef.current = currentTime;
           callbacksRef.current.onProgress?.(currentTime, duration);
@@ -217,12 +170,11 @@ export function VideoPlayer({
       }
     }, 5000);
 
-    addLog('Video.js initialized');
+    addLog('Ready');
 
     return () => {
       if (progressIntervalRef.current) {
         clearInterval(progressIntervalRef.current);
-        progressIntervalRef.current = null;
       }
       if (playerRef.current) {
         playerRef.current.dispose();
@@ -230,24 +182,7 @@ export function VideoPlayer({
       }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [src]); // ONLY re-init when src changes!
-
-  const openInVLC = () => {
-    window.location.href = `vlc://${src}`;
-  };
-
-  const openInExternalPlayer = () => {
-    window.location.href = `intent:${src}#Intent;type=video/*;end`;
-  };
-
-  const copyStreamUrl = () => {
-    navigator.clipboard.writeText(src);
-    alert('Stream URL copied to clipboard!');
-  };
-
-  const openInNewTab = () => {
-    window.open(src, '_blank');
-  };
+  }, [src]);
 
   return (
     <div className="relative w-full">
@@ -263,15 +198,14 @@ export function VideoPlayer({
         {isMobile && (
           <>
             <button
-              onClick={openInVLC}
+              onClick={() => { window.location.href = `vlc://${src}`; }}
               className="flex-1 min-w-[120px] flex items-center justify-center gap-2 px-4 py-3 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-medium transition-colors"
             >
               <ExternalLink className="w-5 h-5" />
               Open in VLC
             </button>
-
             <button
-              onClick={openInExternalPlayer}
+              onClick={() => { window.location.href = `intent:${src}#Intent;type=video/*;end`; }}
               className="flex-1 min-w-[120px] flex items-center justify-center gap-2 px-4 py-3 bg-zinc-700 hover:bg-zinc-600 text-white rounded-lg font-medium transition-colors"
             >
               <Smartphone className="w-5 h-5" />
@@ -279,33 +213,23 @@ export function VideoPlayer({
             </button>
           </>
         )}
-
         <button
-          onClick={copyStreamUrl}
+          onClick={() => { navigator.clipboard.writeText(src); alert('Copied!'); }}
           className="flex-1 min-w-[120px] flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors text-sm"
         >
           Copy URL
         </button>
-
         <button
-          onClick={openInNewTab}
+          onClick={() => { window.open(src, '_blank'); }}
           className="flex-1 min-w-[120px] flex items-center justify-center gap-2 px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors text-sm"
         >
           Test in Browser
         </button>
       </motion.div>
 
-      <div className="hidden md:flex items-center justify-center gap-6 mt-4 text-xs text-zinc-500">
-        <span><kbd className="px-1.5 py-0.5 bg-zinc-800 rounded">Space</kbd> Play/Pause</span>
-        <span><kbd className="px-1.5 py-0.5 bg-zinc-800 rounded">Left</kbd><kbd className="px-1.5 py-0.5 bg-zinc-800 rounded">Right</kbd> Seek 10s</span>
-        <span><kbd className="px-1.5 py-0.5 bg-zinc-800 rounded">F</kbd> Fullscreen</span>
-        <span><kbd className="px-1.5 py-0.5 bg-zinc-800 rounded">M</kbd> Mute</span>
-        <span><kbd className="px-1.5 py-0.5 bg-zinc-800 rounded">C</kbd> Captions</span>
-      </div>
-
       {debugLogs.length > 0 && (
         <div className="mt-4 p-3 bg-zinc-900 rounded-lg text-xs font-mono text-green-400 max-h-48 overflow-y-auto">
-          <div className="font-bold text-white mb-2">Debug Log:</div>
+          <div className="font-bold text-white mb-2">Debug:</div>
           {debugLogs.map((log, i) => (
             <div key={i} className="break-all">{log}</div>
           ))}
