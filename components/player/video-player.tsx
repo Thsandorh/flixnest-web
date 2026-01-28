@@ -206,23 +206,33 @@ export function VideoPlayer({
         finalUrl = proxyUrl(finalUrl, headers);
         addLog(`Proxied URL: ${finalUrl.substring(0, 60)}...`);
 
-        // Debug: fetch and check what proxy returns
-        try {
-          const debugResp = await fetch(finalUrl);
-          const debugText = await debugResp.text();
-          addLog(`Proxy response: ${debugResp.status}`);
-          addLog(`Content starts with: ${debugText.substring(0, 100)}`);
-          if (!debugText.startsWith('#EXTM3U')) {
-            addLog('WARNING: Not a valid M3U8!');
+        // Debug: fetch and check what proxy returns (non-blocking with timeout)
+        const fetchWithTimeout = async () => {
+          try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5000);
+            const debugResp = await fetch(finalUrl, { signal: controller.signal });
+            clearTimeout(timeoutId);
+            const debugText = await debugResp.text();
+            addLog(`Proxy response: ${debugResp.status}`);
+            addLog(`Content starts with: ${debugText.substring(0, 100)}`);
+            if (!debugText.startsWith('#EXTM3U') && !debugText.startsWith('<')) {
+              addLog('WARNING: Not a valid M3U8 or video!');
+            }
+          } catch (e: any) {
+            addLog(`Fetch error: ${e.message}`);
           }
-        } catch (e: any) {
-          addLog(`Fetch error: ${e.message}`);
-        }
+        };
+        // Run debug fetch in background without blocking
+        fetchWithTimeout();
+        addLog('Continuing with player setup...');
       }
 
+      addLog('Preparing video element...');
       v.pause();
       v.removeAttribute('src');
       v.load();
+      addLog('Video element ready');
 
       // Define helper functions first
       const setupHls = (url: string) => {
@@ -295,9 +305,12 @@ export function VideoPlayer({
       try {
         addLog('Attempting Shaka Player...');
         const shakaModule = await import('shaka-player/dist/shaka-player.compiled');
+        addLog('Shaka module imported');
         const shaka = shakaModule.default || shakaModule;
 
+        addLog('Installing polyfills...');
         shaka.polyfill.installAll();
+        addLog('Polyfills installed');
         if (shaka.Player.isBrowserSupported()) {
           addLog('Shaka Player browser supported');
           const player = new shaka.Player(v);
