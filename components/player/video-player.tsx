@@ -1,11 +1,9 @@
 'use client';
 
 import { useRef, useEffect, useState } from 'react';
-import videojs from 'video.js';
-import 'video.js/dist/video-js.css';
+import Hls from 'hls.js';
 import { ExternalLink, Smartphone } from 'lucide-react';
 import { motion } from 'framer-motion';
-import Player from 'video.js/dist/types/player';
 
 interface SubtitleTrack {
   src: string;
@@ -49,8 +47,8 @@ export function VideoPlayer({
   onPlay,
   onPause,
 }: VideoPlayerProps) {
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const playerRef = useRef<Player | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const hlsRef = useRef<Hls | null>(null);
   const [isMobile, setIsMobile] = useState(false);
   const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const lastProgressRef = useRef<number>(0);
@@ -60,7 +58,7 @@ export function VideoPlayer({
   callbacksRef.current = { onProgress, onEnded, onPlay, onPause };
 
   const addLog = (msg: string) => {
-    setDebugLogs(prev => [...prev.slice(-10), `${new Date().toLocaleTimeString()}: ${msg}`]);
+    setDebugLogs(prev => [...prev.slice(-15), `${new Date().toLocaleTimeString()}: ${msg}`]);
   };
 
   useEffect(() => {
@@ -76,118 +74,170 @@ export function VideoPlayer({
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  // Initialize Video.js
+  // Initialize player
   useEffect(() => {
-    if (!containerRef.current) return;
+    const video = videoRef.current;
+    if (!video) return;
 
-    // Clear any existing content
-    containerRef.current.innerHTML = '';
+    // Cleanup previous
+    if (hlsRef.current) {
+      hlsRef.current.destroy();
+      hlsRef.current = null;
+    }
 
-    addLog('Initializing Video.js...');
+    addLog('Setting up player...');
 
     let finalUrl = src;
     if (/^https?:\/\//i.test(finalUrl)) {
       finalUrl = proxyUrl(finalUrl, headers);
     }
-    addLog(`URL: ${finalUrl.substring(0, 80)}...`);
+    addLog(`URL: ${finalUrl.substring(0, 70)}...`);
 
-    const videoElement = document.createElement('video');
-    videoElement.classList.add('video-js', 'vjs-big-play-centered', 'vjs-fluid');
-    containerRef.current.appendChild(videoElement);
+    // Check if it's HLS
+    const isHls = finalUrl.includes('.m3u8') || finalUrl.includes('/api/proxy');
 
-    const player = videojs(videoElement, {
-      controls: true,
-      autoplay: false,
-      preload: 'auto',
-      fluid: true,
-      responsive: true,
-      playbackRates: [0.5, 1, 1.25, 1.5, 2],
-      html5: {
-        vhs: {
-          overrideNative: true,
-        },
-        nativeAudioTracks: false,
-        nativeVideoTracks: false,
-      },
-      sources: [{
-        src: finalUrl,
-        type: 'application/x-mpegURL',
-      }],
-      poster: poster,
-    });
+    if (isHls && Hls.isSupported()) {
+      addLog('Using HLS.js');
+      const hls = new Hls({
+        debug: false,
+        enableWorker: true,
+        lowLatencyMode: false,
+        backBufferLength: 90,
+        maxBufferLength: 30,
+        maxMaxBufferLength: 600,
+      });
+      hlsRef.current = hls;
 
-    playerRef.current = player;
+      hls.on(Hls.Events.MANIFEST_PARSED, (_event, data) => {
+        addLog(`Manifest parsed, ${data.levels.length} quality levels`);
+        if (startTime > 0) video.currentTime = startTime;
+      });
 
-    subtitles.forEach((track, index) => {
-      player.addRemoteTextTrack({
-        kind: 'subtitles',
-        src: track.src,
-        srclang: track.srclang,
-        label: track.label,
-        default: track.srclang === 'en' && index === 0,
-      }, false);
-    });
+      hls.on(Hls.Events.LEVEL_LOADED, (_event, data) => {
+        addLog(`Level loaded: ${data.details.totalduration?.toFixed(0)}s`);
+      });
 
-    player.on('loadedmetadata', () => {
-      addLog('Metadata loaded');
-      if (startTime > 0) player.currentTime(startTime);
-    });
+      hls.on(Hls.Events.ERROR, (_event, data) => {
+        addLog(`HLS Error: ${data.type} - ${data.details}`);
+        console.error('HLS Error:', data);
 
-    player.on('play', () => {
-      addLog('Playing');
-      callbacksRef.current.onPlay?.();
-    });
+        if (data.fatal) {
+          switch (data.type) {
+            case Hls.ErrorTypes.NETWORK_ERROR:
+              addLog('Network error, trying to recover...');
+              hls.startLoad();
+              break;
+            case Hls.ErrorTypes.MEDIA_ERROR:
+              addLog('Media error, trying to recover...');
+              hls.recoverMediaError();
+              break;
+            default:
+              addLog('Fatal error, cannot recover');
+              hls.destroy();
+              break;
+          }
+        }
+      });
 
-    player.on('pause', () => {
-      const currentTime = player.currentTime() || 0;
-      const duration = player.duration() || 0;
-      if (currentTime > 0) {
-        callbacksRef.current.onProgress?.(currentTime, duration);
-        callbacksRef.current.onPause?.();
-      }
-    });
+      hls.loadSource(finalUrl);
+      hls.attachMedia(video);
+      addLog('HLS attached');
 
-    player.on('ended', () => {
-      addLog('Ended');
-      const duration = player.duration() || 0;
-      callbacksRef.current.onProgress?.(duration, duration);
-      callbacksRef.current.onEnded?.();
-    });
+    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      // Safari native HLS
+      addLog('Using native HLS (Safari)');
+      video.src = finalUrl;
+    } else {
+      // Direct video
+      addLog('Using direct video source');
+      video.src = finalUrl;
+    }
 
-    player.on('error', () => {
-      const error = player.error();
-      addLog(`Error: ${error?.code} - ${error?.message}`);
-    });
-
+    // Progress tracking
     progressIntervalRef.current = setInterval(() => {
-      if (playerRef.current && !playerRef.current.paused()) {
-        const currentTime = playerRef.current.currentTime() || 0;
-        const duration = playerRef.current.duration() || 0;
-        if (Math.abs(currentTime - lastProgressRef.current) >= 5) {
-          lastProgressRef.current = currentTime;
-          callbacksRef.current.onProgress?.(currentTime, duration);
+      if (video && !video.paused && video.currentTime > 0) {
+        if (Math.abs(video.currentTime - lastProgressRef.current) >= 5) {
+          lastProgressRef.current = video.currentTime;
+          callbacksRef.current.onProgress?.(video.currentTime, video.duration || 0);
         }
       }
     }, 5000);
-
-    addLog('Ready');
 
     return () => {
       if (progressIntervalRef.current) {
         clearInterval(progressIntervalRef.current);
       }
-      if (playerRef.current) {
-        playerRef.current.dispose();
-        playerRef.current = null;
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
       }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [src]);
 
+  const handlePlay = () => {
+    addLog('Playing');
+    callbacksRef.current.onPlay?.();
+  };
+
+  const handlePause = () => {
+    const video = videoRef.current;
+    if (video && video.currentTime > 0) {
+      callbacksRef.current.onProgress?.(video.currentTime, video.duration || 0);
+      callbacksRef.current.onPause?.();
+    }
+  };
+
+  const handleEnded = () => {
+    addLog('Ended');
+    const video = videoRef.current;
+    if (video) {
+      callbacksRef.current.onProgress?.(video.duration || 0, video.duration || 0);
+      callbacksRef.current.onEnded?.();
+    }
+  };
+
+  const handleLoadedMetadata = () => {
+    addLog('Metadata loaded');
+    const video = videoRef.current;
+    if (video && startTime > 0) {
+      video.currentTime = startTime;
+    }
+  };
+
+  const handleError = () => {
+    const video = videoRef.current;
+    if (video?.error) {
+      addLog(`Video error: ${video.error.code} - ${video.error.message}`);
+    }
+  };
+
   return (
     <div className="relative w-full">
       <div className="w-full aspect-video bg-black rounded-xl overflow-hidden">
-        <div ref={containerRef} data-vjs-player />
+        <video
+          ref={videoRef}
+          className="w-full h-full"
+          controls
+          playsInline
+          poster={poster}
+          onPlay={handlePlay}
+          onPause={handlePause}
+          onEnded={handleEnded}
+          onLoadedMetadata={handleLoadedMetadata}
+          onError={handleError}
+        >
+          {subtitles.map((track, index) => (
+            <track
+              key={`${track.srclang}-${index}`}
+              src={track.src}
+              kind="subtitles"
+              label={track.label}
+              srcLang={track.srclang}
+              default={track.srclang === 'en' && index === 0}
+            />
+          ))}
+        </video>
       </div>
 
       <motion.div
