@@ -1,7 +1,17 @@
-﻿'use client';
+'use client';
 
 import { useRef, useEffect, useState, useCallback } from 'react';
-import Hls from 'hls.js';
+import {
+  MediaPlayer,
+  MediaProvider,
+  type MediaPlayerInstance,
+} from '@vidstack/react';
+import {
+  DefaultVideoLayout,
+  defaultLayoutIcons,
+} from '@vidstack/react/player/layouts/default';
+import '@vidstack/react/player/styles/default/theme.css';
+import '@vidstack/react/player/styles/default/layouts/video.css';
 import { ExternalLink, Smartphone } from 'lucide-react';
 import { motion } from 'framer-motion';
 
@@ -24,26 +34,6 @@ interface VideoPlayerProps {
   onPause?: () => void;
 }
 
-function isHls(url: string): boolean {
-  if (/\.m3u8(\?.*)?$/i.test(url)) return true;
-  try {
-    const u = new URL(url, typeof window !== 'undefined' ? window.location.origin : 'http://localhost');
-    const inner = u.searchParams.get('url');
-    if (inner && /\.m3u8(\?.*)?$/i.test(inner)) return true;
-  } catch {}
-  return false;
-}
-
-function isDash(url: string): boolean {
-  if (/\.mpd(\?.*)?$/i.test(url)) return true;
-  try {
-    const u = new URL(url, typeof window !== 'undefined' ? window.location.origin : 'http://localhost');
-    const inner = u.searchParams.get('url');
-    if (inner && /\.mpd(\?.*)?$/i.test(inner)) return true;
-  } catch {}
-  return false;
-}
-
 function proxyUrl(url: string, headers?: Record<string, string>): string {
   if (url.startsWith('/api/proxy')) {
     return url;
@@ -53,7 +43,6 @@ function proxyUrl(url: string, headers?: Record<string, string>): string {
   params.set('url', url);
 
   if (headers && Object.keys(headers).length > 0) {
-    // Pass all headers as JSON-encoded parameter
     params.set('headers', JSON.stringify(headers));
   }
 
@@ -72,12 +61,12 @@ export function VideoPlayer({
   onPlay,
   onPause,
 }: VideoPlayerProps) {
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const hlsRef = useRef<Hls | null>(null);
-  const shakaRef = useRef<any>(null);
+  const playerRef = useRef<MediaPlayerInstance>(null);
   const [isMobile, setIsMobile] = useState(false);
-  const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const lastProgressRef = useRef<number>(0);
+
+  // Compute proxied URL
+  const streamUrl = /^https?:\/\//i.test(src) ? proxyUrl(src, headers) : src;
 
   // Detect mobile
   useEffect(() => {
@@ -94,48 +83,22 @@ export function VideoPlayer({
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  const destroyHls = useCallback(() => {
-    if (hlsRef.current) {
-      try {
-        hlsRef.current.destroy();
-      } catch {}
-      hlsRef.current = null;
-    }
-  }, []);
+  // Handle progress updates
+  const handleTimeUpdate = useCallback(() => {
+    const player = playerRef.current;
+    if (player && player.currentTime > 0 && !player.paused) {
+      const currentTime = player.currentTime;
+      const duration = player.duration || 0;
 
-  const destroyShaka = useCallback(async () => {
-    if (shakaRef.current) {
-      try {
-        await shakaRef.current.destroy();
-      } catch {}
-      shakaRef.current = null;
-    }
-  }, []);
-
-  // Save progress periodically
-  useEffect(() => {
-    progressIntervalRef.current = setInterval(() => {
-      const player = videoRef.current;
-      if (player && player.currentTime > 0 && !player.paused) {
-        const currentTime = player.currentTime;
-        const duration = player.duration || 0;
-
-        if (Math.abs(currentTime - lastProgressRef.current) >= 5) {
-          lastProgressRef.current = currentTime;
-          onProgress?.(currentTime, duration);
-        }
+      if (Math.abs(currentTime - lastProgressRef.current) >= 5) {
+        lastProgressRef.current = currentTime;
+        onProgress?.(currentTime, duration);
       }
-    }, 5000);
-
-    return () => {
-      if (progressIntervalRef.current) {
-        clearInterval(progressIntervalRef.current);
-      }
-    };
+    }
   }, [onProgress]);
 
   const handlePause = useCallback(() => {
-    const player = videoRef.current;
+    const player = playerRef.current;
     if (player && player.currentTime > 0) {
       onProgress?.(player.currentTime, player.duration || 0);
       onPause?.();
@@ -143,7 +106,7 @@ export function VideoPlayer({
   }, [onProgress, onPause]);
 
   const handleEnded = useCallback(() => {
-    const player = videoRef.current;
+    const player = playerRef.current;
     if (player) {
       onProgress?.(player.duration || 0, player.duration || 0);
       onEnded?.();
@@ -153,13 +116,6 @@ export function VideoPlayer({
   const handlePlay = useCallback(() => {
     onPlay?.();
   }, [onPlay]);
-
-  const handleSeeked = useCallback(() => {
-    const player = videoRef.current;
-    if (player) {
-      lastProgressRef.current = player.currentTime;
-    }
-  }, []);
 
   // Open in VLC
   const openInVLC = () => {
@@ -184,194 +140,37 @@ export function VideoPlayer({
     window.open(src, '_blank');
   };
 
-  useEffect(() => {
-    const v = videoRef.current;
-    if (!v) return;
-
-    const setupPlayback = async () => {
-      console.log('[Player] Setting up playback for:', src);
-      console.log('[Player] Headers:', headers);
-      destroyHls();
-      await destroyShaka();
-
-      let finalUrl = src;
-      // Always proxy remote URLs (http/https) to handle CORS
-      if (/^https?:\/\//i.test(finalUrl)) {
-        finalUrl = proxyUrl(finalUrl, headers);
-      }
-      console.log('[Player] Final URL:', finalUrl);
-      console.log('[Player] isHls:', isHls(finalUrl));
-
-      v.pause();
-      v.removeAttribute('src');
-      v.load();
-
-      // Define helper functions first
-      const setupHls = (url: string) => {
-        console.log('[HLS] Setting up with URL:', url);
-        if (Hls.isSupported()) {
-          console.log('[HLS] hls.js is supported');
-          const hls = new Hls({
-            debug: true,
-            enableWorker: true,
-            xhrSetup: (xhr, xhrUrl) => {
-              console.log('[HLS] XHR request to:', xhrUrl);
-            },
-          });
-          hlsRef.current = hls;
-          hls.loadSource(url);
-          hls.attachMedia(v);
-          hls.on(Hls.Events.MANIFEST_PARSED, (event, data) => {
-            console.log('[HLS] Manifest parsed, levels:', data.levels?.length);
-            if (startTime > 0) {
-              v.currentTime = startTime;
-            }
-          });
-          hls.on(Hls.Events.MANIFEST_LOADED, (event, data) => {
-            console.log('[HLS] Manifest loaded:', data.url);
-          });
-          hls.on(Hls.Events.ERROR, (_evt, data) => {
-            console.error('[HLS] error:', data?.type, data?.details, data?.response?.code, data);
-
-            if (data.fatal) {
-              switch (data.type) {
-                case Hls.ErrorTypes.NETWORK_ERROR:
-                  console.error('[HLS] Fatal network error, trying to recover...');
-                  hls.startLoad();
-                  break;
-                case Hls.ErrorTypes.MEDIA_ERROR:
-                  console.error('[HLS] Fatal media error, trying to recover...');
-                  hls.recoverMediaError();
-                  break;
-                default:
-                  console.error('[HLS] Fatal error, cannot recover');
-                  destroyHls();
-                  break;
-              }
-            }
-          });
-          return true;
-        }
-
-        if (v.canPlayType('application/vnd.apple.mpegurl')) {
-          v.src = url;
-          return true;
-        }
-
-        return false;
-      };
-
-      const fallbackToNative = (url: string) => {
-        if (isHls(url)) {
-          if (setupHls(url)) return;
-        }
-
-        if (isDash(url)) {
-          v.src = url;
-          return;
-        }
-
-        v.src = url;
-      };
-
-      // Prefer HLS.js for HLS sources (Shaka can fail on TS playlists)
-      if (isHls(finalUrl)) {
-        if (!setupHls(finalUrl)) {
-          console.warn('[HLS] not supported in this browser');
-        }
-        return;
-      }
-
-      // Try Shaka first (best codec support)
-      try {
-        const shakaModule = await import('shaka-player/dist/shaka-player.compiled');
-        const shaka = shakaModule.default || shakaModule;
-
-        shaka.polyfill.installAll();
-        if (shaka.Player.isBrowserSupported()) {
-          const player = new shaka.Player(v);
-          shakaRef.current = player;
-
-          player.configure({
-            preferredAudioChannelCount: 6,
-            preferredAudioCodecs: ['ec-3', 'ac-3', 'mp4a'],
-            streaming: {
-              bufferingGoal: 30,
-              rebufferingGoal: 2,
-              bufferBehind: 30,
-              alwaysStreamText: false,
-            },
-            manifest: {
-              defaultPresentationDelay: 10,
-            },
-            abr: {
-              enabled: true,
-            },
-          });
-
-          player.addEventListener('error', async (event: any) => {
-            const error = event?.detail;
-            console.error('[SHAKA] Error:', error);
-
-            if (error?.code === 4032 || error?.code === 1001 || error?.severity === 2) {
-              await destroyShaka();
-              fallbackToNative(finalUrl);
-            }
-          });
-
-          try {
-            await player.load(finalUrl);
-            return;
-          } catch (loadError) {
-            console.warn('[SHAKA] Load error, falling back:', loadError);
-            await destroyShaka();
-          }
-        }
-      } catch (e) {
-        console.warn('[SHAKA] Not available, falling back');
-      }
-
-      fallbackToNative(finalUrl);
-    };
-
-    setupPlayback();
-
-    return () => {
-      destroyHls();
-      destroyShaka();
-    };
-  }, [src, headers, startTime, destroyHls, destroyShaka]);
-
   return (
     <div className="relative w-full">
       <div className="w-full aspect-video bg-black rounded-xl overflow-hidden">
-        <video
-          ref={videoRef}
-          className="w-full h-full"
-          controls
-          playsInline
+        <MediaPlayer
+          ref={playerRef}
+          src={streamUrl}
           poster={poster}
+          title={title || ''}
+          crossOrigin="anonymous"
+          playsInline
+          currentTime={startTime}
+          onTimeUpdate={handleTimeUpdate}
           onPlay={handlePlay}
           onPause={handlePause}
           onEnded={handleEnded}
-          onSeeked={handleSeeked}
-          onLoadedMetadata={() => {
-            if (startTime > 0 && videoRef.current) {
-              videoRef.current.currentTime = startTime;
-            }
-          }}
+          className="w-full h-full"
         >
-          {subtitles.map((track, index) => (
-            <track
-              key={`${track.srclang}-${index}`}
-              src={track.src}
-              kind="subtitles"
-              label={track.label}
-              srcLang={track.srclang}
-              default={track.srclang === 'en' && index === 0}
-            />
-          ))}
-        </video>
+          <MediaProvider>
+            {subtitles.map((track, index) => (
+              <track
+                key={`${track.srclang}-${index}`}
+                src={track.src}
+                kind="subtitles"
+                label={track.label}
+                srcLang={track.srclang}
+                default={track.srclang === 'en' && index === 0}
+              />
+            ))}
+          </MediaProvider>
+          <DefaultVideoLayout icons={defaultLayoutIcons} />
+        </MediaPlayer>
       </div>
 
       <motion.div
