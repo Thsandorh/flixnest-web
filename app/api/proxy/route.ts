@@ -101,6 +101,10 @@ export async function GET(request: NextRequest) {
       responseHeaders['Accept-Ranges'] = acceptRanges;
     }
 
+    // Check if URL looks like an M3U8 playlist (regardless of content-type)
+    const isM3u8Url = /\.m3u8(\?.*)?$/i.test(decodedUrl) || decodedUrl.includes('.m3u8');
+    const isM3u8Content = contentType.includes('mpegurl') || contentType.includes('x-mpegurl');
+
     // Handle different content types
     if (contentType.includes('application/json')) {
       const data = await response.json();
@@ -111,12 +115,12 @@ export async function GET(request: NextRequest) {
           'Cache-Control': 'no-store, max-age=0, must-revalidate',
         },
       });
-    } else if (contentType.includes('text/') || contentType.includes('application/x-mpegurl') || contentType.includes('application/vnd.apple.mpegurl')) {
+    } else if (isM3u8Url || isM3u8Content || contentType.includes('text/')) {
       // Handle m3u8 playlists - need to proxy URLs inside them
       const text = await response.text();
 
       // If it's an m3u8 file, proxy the URLs inside
-      if (decodedUrl.includes('.m3u8') || contentType.includes('mpegurl')) {
+      if (isM3u8Url || isM3u8Content) {
         const baseUrl = decodedUrl.substring(0, decodedUrl.lastIndexOf('/') + 1);
 
         // Helper to build an absolute URL and wrap it with our proxy
@@ -171,9 +175,15 @@ export async function GET(request: NextRequest) {
           })
           .join('\n');
 
+        // Ensure correct content-type for M3U8 playlists
+        const m3u8Headers = {
+          ...responseHeaders,
+          'Content-Type': 'application/vnd.apple.mpegurl',
+        };
+
         return new NextResponse(proxiedM3u8, {
           status: response.status,
-          headers: responseHeaders,
+          headers: m3u8Headers,
         });
       }
 
