@@ -1,7 +1,8 @@
 'use client';
 
 import { useRef, useEffect, useState, useCallback } from 'react';
-import Hls from 'hls.js';
+import videojs from 'video.js';
+import 'video.js/dist/video-js.css';
 import { ExternalLink, Smartphone } from 'lucide-react';
 import { motion } from 'framer-motion';
 
@@ -22,27 +23,6 @@ interface VideoPlayerProps {
   onEnded?: () => void;
   onPlay?: () => void;
   onPause?: () => void;
-}
-
-function isHls(url: string): boolean {
-  // Check if URL contains .m3u8 anywhere (not just at the end)
-  if (url.toLowerCase().includes('.m3u8')) return true;
-  try {
-    const u = new URL(url, typeof window !== 'undefined' ? window.location.origin : 'http://localhost');
-    const inner = u.searchParams.get('url');
-    if (inner && inner.toLowerCase().includes('.m3u8')) return true;
-  } catch {}
-  return false;
-}
-
-function isDash(url: string): boolean {
-  if (/\.mpd(\?.*)?$/i.test(url)) return true;
-  try {
-    const u = new URL(url, typeof window !== 'undefined' ? window.location.origin : 'http://localhost');
-    const inner = u.searchParams.get('url');
-    if (inner && /\.mpd(\?.*)?$/i.test(inner)) return true;
-  } catch {}
-  return false;
 }
 
 function proxyUrl(url: string, headers?: Record<string, string>): string {
@@ -73,8 +53,8 @@ export function VideoPlayer({
   onPause,
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const hlsRef = useRef<Hls | null>(null);
-  const shakaRef = useRef<any>(null);
+  const playerRef = useRef<ReturnType<typeof videojs> | null>(null);
+  const recoveryRef = useRef<{ src: string; attempts: number }>({ src: '', attempts: 0 });
   const [isMobile, setIsMobile] = useState(false);
   const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const lastProgressRef = useRef<number>(0);
@@ -99,21 +79,12 @@ export function VideoPlayer({
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  const destroyHls = useCallback(() => {
-    if (hlsRef.current) {
+  const destroyPlayer = useCallback(() => {
+    if (playerRef.current) {
       try {
-        hlsRef.current.destroy();
+        playerRef.current.dispose();
       } catch {}
-      hlsRef.current = null;
-    }
-  }, []);
-
-  const destroyShaka = useCallback(async () => {
-    if (shakaRef.current) {
-      try {
-        await shakaRef.current.destroy();
-      } catch {}
-      shakaRef.current = null;
+      playerRef.current = null;
     }
   }, []);
 
@@ -191,196 +162,120 @@ export function VideoPlayer({
 
   useEffect(() => {
     const v = videoRef.current;
-    if (!v) return;
+    if (!v || playerRef.current) return;
 
-    const setupPlayback = async () => {
+    const player = videojs(v, {
+      controls: true,
+      preload: 'auto',
+      fluid: true,
+      poster,
+      html5: {
+        vhs: {
+          overrideNative: false,
+        },
+        nativeAudioTracks: true,
+        nativeVideoTracks: true,
+      },
+    });
+    playerRef.current = player;
+
+    player.on('loadedmetadata', () => {
+      if (startTime > 0) {
+        player.currentTime(startTime);
+      }
+    });
+
+    player.on('play', handlePlay);
+    player.on('pause', handlePause);
+    player.on('ended', handleEnded);
+    player.on('error', () => {
+      const error = player.error();
+      const currentSrc = player.currentSrc();
+      addLog(`Video.js error: ${error?.code || 'unknown'} - ${error?.message || 'no message'}`);
+
+      if (currentSrc && recoveryRef.current.src === currentSrc) {
+        recoveryRef.current.attempts += 1;
+      } else {
+        recoveryRef.current = { src: currentSrc, attempts: 1 };
+      }
+
+      if (recoveryRef.current.attempts <= 2) {
+        player.src({ src: currentSrc, type: player.currentType() || 'application/x-mpegURL' });
+        player.load();
+        const retryPromise = player.play?.();
+        if (retryPromise && typeof (retryPromise as Promise<void>).catch === 'function') {
+          retryPromise.catch(() => undefined);
+        }
+      }
+    });
+
+    return () => {
+      destroyPlayer();
+    };
+  }, [destroyPlayer, handleEnded, handlePause, handlePlay, poster, startTime]);
+
+  useEffect(() => {
+    const player = playerRef.current;
+    if (!player) return;
+
+    const controller = new AbortController();
+
+    const setupSource = async () => {
       addLog('Starting playback setup...');
       addLog(`Source: ${src.substring(0, 60)}...`);
       addLog(`Headers: ${headers ? JSON.stringify(headers).substring(0, 50) : 'none'}`);
-      destroyHls();
-      await destroyShaka();
 
       let finalUrl = src;
-      // Always proxy remote URLs (http/https) to handle CORS
       if (/^https?:\/\//i.test(finalUrl)) {
         finalUrl = proxyUrl(finalUrl, headers);
         addLog(`Proxied URL: ${finalUrl.substring(0, 60)}...`);
+      }
 
-        // Debug: fetch and check what proxy returns
+      const isHlsSource = finalUrl.toLowerCase().includes('.m3u8');
+      let source: { src: string; type?: string } = { src: finalUrl };
+
+      if (isHlsSource) {
+        source = { src: finalUrl, type: 'application/x-mpegURL' };
+      } else {
         try {
-          const debugResp = await fetch(finalUrl);
-          const debugText = await debugResp.text();
-          addLog(`Proxy response: ${debugResp.status}`);
-          addLog(`Content starts with: ${debugText.substring(0, 100)}`);
-          if (!debugText.startsWith('#EXTM3U')) {
-            addLog('WARNING: Not a valid M3U8!');
+          const headResp = await fetch(finalUrl, { method: 'HEAD', signal: controller.signal });
+          const contentType = headResp.headers.get('content-type');
+          if (contentType) {
+            addLog(`Detected content-type: ${contentType}`);
+            source = { src: finalUrl, type: contentType.split(';')[0] };
           }
-        } catch (e: any) {
-          addLog(`Fetch error: ${e.message}`);
-        }
-      }
-
-      v.pause();
-      v.removeAttribute('src');
-      v.load();
-
-      // Define helper functions first
-      const setupHls = (url: string) => {
-        addLog(`Setting up HLS for: ${url.substring(0, 50)}...`);
-        if (Hls.isSupported()) {
-          addLog('HLS.js supported, creating instance');
-          const hls = new Hls();
-          hlsRef.current = hls;
-          hls.loadSource(url);
-          hls.attachMedia(v);
-          hls.on(Hls.Events.MANIFEST_PARSED, () => {
-            addLog('Manifest parsed OK');
-            if (startTime > 0) {
-              v.currentTime = startTime;
-            }
-          });
-          hls.on(Hls.Events.MANIFEST_LOADED, () => {
-            addLog('Manifest loaded OK');
-          });
-          hls.on(Hls.Events.FRAG_LOADED, () => {
-            addLog('Fragment loaded OK');
-          });
-          hls.on(Hls.Events.ERROR, (_evt, data) => {
-            addLog(`HLS ERROR: ${data?.type} - ${data?.details} - ${data?.response?.code || 'no code'}`);
-
-            if (data.fatal) {
-              switch (data.type) {
-                case Hls.ErrorTypes.NETWORK_ERROR:
-                  addLog('Fatal network error, retrying...');
-                  hls.startLoad();
-                  break;
-                case Hls.ErrorTypes.MEDIA_ERROR:
-                  addLog('Fatal media error, recovering...');
-                  hls.recoverMediaError();
-                  break;
-                default:
-                  addLog('Fatal error, cannot recover');
-                  destroyHls();
-                  break;
-              }
-            }
-          });
-          return true;
-        }
-
-        if (v.canPlayType('application/vnd.apple.mpegurl')) {
-          addLog('Using native HLS');
-          v.src = url;
-          return true;
-        }
-
-        addLog('HLS not supported');
-        return false;
-      };
-
-      const fallbackToNative = (url: string) => {
-        if (isHls(url)) {
-          if (setupHls(url)) return;
-        }
-
-        if (isDash(url)) {
-          v.src = url;
-          return;
-        }
-
-        v.src = url;
-      };
-
-      // Check if this is a proxied URL or HLS source
-      const isProxiedUrl = finalUrl.startsWith('/api/proxy');
-      const isHlsSource = isHls(finalUrl);
-
-      // For proxied URLs, always try HLS.js first (WebStreamr returns HLS)
-      if (isProxiedUrl || isHlsSource) {
-        if (setupHls(finalUrl)) {
-          return;
-        }
-        console.warn('[HLS] Failed to setup, trying alternatives...');
-      }
-
-      // Try Shaka for non-HLS sources (best codec support)
-      try {
-        const shakaModule = await import('shaka-player/dist/shaka-player.compiled');
-        const shaka = shakaModule.default || shakaModule;
-
-        shaka.polyfill.installAll();
-        if (shaka.Player.isBrowserSupported()) {
-          const player = new shaka.Player(v);
-          shakaRef.current = player;
-
-          player.configure({
-            preferredAudioChannelCount: 6,
-            preferredAudioCodecs: ['ec-3', 'ac-3', 'mp4a'],
-            streaming: {
-              bufferingGoal: 30,
-              rebufferingGoal: 2,
-              bufferBehind: 30,
-              alwaysStreamText: false,
-            },
-            manifest: {
-              defaultPresentationDelay: 10,
-            },
-            abr: {
-              enabled: true,
-            },
-          });
-
-          player.addEventListener('error', async (event: any) => {
-            const error = event?.detail;
-            console.error('[SHAKA] Error:', error);
-
-            if (error?.code === 4032 || error?.code === 1001 || error?.severity === 2) {
-              await destroyShaka();
-              fallbackToNative(finalUrl);
-            }
-          });
-
-          try {
-            await player.load(finalUrl);
-            return;
-          } catch (loadError) {
-            console.warn('[SHAKA] Load error, falling back:', loadError);
-            await destroyShaka();
+        } catch (error) {
+          if (error instanceof Error && error.name !== 'AbortError') {
+            addLog(`HEAD failed: ${error.message}`);
           }
         }
-      } catch (e) {
-        console.warn('[SHAKA] Not available, falling back');
       }
 
-      fallbackToNative(finalUrl);
+      player.poster(poster || '');
+      player.src(source);
+      player.load();
+      const playPromise = player.play?.();
+      if (playPromise && typeof (playPromise as Promise<void>).catch === 'function') {
+        playPromise.catch(() => undefined);
+      }
     };
 
-    setupPlayback();
+    setupSource();
 
     return () => {
-      destroyHls();
-      destroyShaka();
+      controller.abort();
     };
-  }, [src, headers, startTime, destroyHls, destroyShaka]);
+  }, [src, headers, poster]);
 
   return (
     <div className="relative w-full">
       <div className="w-full aspect-video bg-black rounded-xl overflow-hidden">
         <video
           ref={videoRef}
-          className="w-full h-full"
+          className="video-js vjs-big-play-centered w-full h-full"
           controls
           playsInline
-          poster={poster}
-          onPlay={handlePlay}
-          onPause={handlePause}
-          onEnded={handleEnded}
           onSeeked={handleSeeked}
-          onLoadedMetadata={() => {
-            if (startTime > 0 && videoRef.current) {
-              videoRef.current.currentTime = startTime;
-            }
-          }}
         >
           {subtitles.map((track, index) => (
             <track

@@ -138,8 +138,34 @@ export async function GET(request: NextRequest) {
         const baseUrl = decodedUrl.substring(0, decodedUrl.lastIndexOf('/') + 1);
         const urlOrigin = targetUrl.origin;
 
+        let playlistText = text;
+        const trimmed = playlistText.trim();
+        const hasRealNewlines = /[\r\n]/.test(playlistText);
+        const looksLikeJsonString =
+          ((trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+            (trimmed.startsWith("'") && trimmed.endsWith("'"))) &&
+          (trimmed.includes('\\n') || trimmed.includes('\\r') || trimmed.includes('#EXTM3U'));
+
+        if (looksLikeJsonString) {
+          try {
+            const parsed = JSON.parse(trimmed);
+            if (typeof parsed === 'string' && parsed.includes('#EXTM3U')) {
+              playlistText = parsed;
+            }
+          } catch {
+            // ignore invalid JSON string
+          }
+        }
+
+        if (!hasRealNewlines && (playlistText.includes('\\n') || playlistText.includes('\\r'))) {
+          playlistText = playlistText
+            .replace(/\\r\\n/g, '\n')
+            .replace(/\\n/g, '\n')
+            .replace(/\\r/g, '\n');
+        }
+
         // Normalize line endings (handle \r\n, \r, and \n)
-        const normalizedText = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+        const normalizedText = playlistText.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
         // Helper to build an absolute URL and wrap it with our proxy
         const toProxiedUrl = (rawUrl: string) => {
