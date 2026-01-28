@@ -78,6 +78,11 @@ export function VideoPlayer({
   const [isMobile, setIsMobile] = useState(false);
   const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const lastProgressRef = useRef<number>(0);
+  const [debugLogs, setDebugLogs] = useState<string[]>([]);
+
+  const addLog = (msg: string) => {
+    setDebugLogs(prev => [...prev.slice(-10), `${new Date().toLocaleTimeString()}: ${msg}`]);
+  };
 
   // Detect mobile
   useEffect(() => {
@@ -189,6 +194,9 @@ export function VideoPlayer({
     if (!v) return;
 
     const setupPlayback = async () => {
+      addLog('Starting playback setup...');
+      addLog(`Source: ${src.substring(0, 60)}...`);
+      addLog(`Headers: ${headers ? JSON.stringify(headers).substring(0, 50) : 'none'}`);
       destroyHls();
       await destroyShaka();
 
@@ -196,6 +204,7 @@ export function VideoPlayer({
       // Always proxy remote URLs (http/https) to handle CORS
       if (/^https?:\/\//i.test(finalUrl)) {
         finalUrl = proxyUrl(finalUrl, headers);
+        addLog(`Proxied URL: ${finalUrl.substring(0, 60)}...`);
       }
 
       v.pause();
@@ -204,31 +213,40 @@ export function VideoPlayer({
 
       // Define helper functions first
       const setupHls = (url: string) => {
+        addLog(`Setting up HLS for: ${url.substring(0, 50)}...`);
         if (Hls.isSupported()) {
+          addLog('HLS.js supported, creating instance');
           const hls = new Hls();
           hlsRef.current = hls;
           hls.loadSource(url);
           hls.attachMedia(v);
           hls.on(Hls.Events.MANIFEST_PARSED, () => {
+            addLog('Manifest parsed OK');
             if (startTime > 0) {
               v.currentTime = startTime;
             }
           });
+          hls.on(Hls.Events.MANIFEST_LOADED, () => {
+            addLog('Manifest loaded OK');
+          });
+          hls.on(Hls.Events.FRAG_LOADED, () => {
+            addLog('Fragment loaded OK');
+          });
           hls.on(Hls.Events.ERROR, (_evt, data) => {
-            console.warn('[HLS] error:', data?.type, data?.details, data?.response?.code);
+            addLog(`HLS ERROR: ${data?.type} - ${data?.details} - ${data?.response?.code || 'no code'}`);
 
             if (data.fatal) {
               switch (data.type) {
                 case Hls.ErrorTypes.NETWORK_ERROR:
-                  console.error('[HLS] Fatal network error, trying to recover...');
+                  addLog('Fatal network error, retrying...');
                   hls.startLoad();
                   break;
                 case Hls.ErrorTypes.MEDIA_ERROR:
-                  console.error('[HLS] Fatal media error, trying to recover...');
+                  addLog('Fatal media error, recovering...');
                   hls.recoverMediaError();
                   break;
                 default:
-                  console.error('[HLS] Fatal error, cannot recover');
+                  addLog('Fatal error, cannot recover');
                   destroyHls();
                   break;
               }
@@ -238,10 +256,12 @@ export function VideoPlayer({
         }
 
         if (v.canPlayType('application/vnd.apple.mpegurl')) {
+          addLog('Using native HLS');
           v.src = url;
           return true;
         }
 
+        addLog('HLS not supported');
         return false;
       };
 
@@ -420,6 +440,16 @@ export function VideoPlayer({
           <kbd className="px-1.5 py-0.5 bg-zinc-800 rounded">C</kbd> Captions
         </span>
       </div>
+
+      {/* Debug logs */}
+      {debugLogs.length > 0 && (
+        <div className="mt-4 p-3 bg-zinc-900 rounded-lg text-xs font-mono text-green-400 max-h-48 overflow-y-auto">
+          <div className="font-bold text-white mb-2">Debug Log:</div>
+          {debugLogs.map((log, i) => (
+            <div key={i} className="break-all">{log}</div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
