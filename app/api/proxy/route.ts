@@ -17,12 +17,14 @@ export async function GET(request: NextRequest) {
 
   try {
     const decodedUrl = decodeURIComponent(url);
+    console.log('[Proxy] Fetching:', decodedUrl.substring(0, 100) + '...');
 
     // Validate URL
     let targetUrl: URL;
     try {
       targetUrl = new URL(decodedUrl);
     } catch {
+      console.error('[Proxy] Invalid URL:', decodedUrl);
       return NextResponse.json(
         { error: 'Invalid URL provided' },
         { status: 400 }
@@ -73,6 +75,16 @@ export async function GET(request: NextRequest) {
       method: 'GET',
       headers: upstreamHeaders,
     });
+
+    console.log('[Proxy] Response:', response.status, response.statusText, 'for', targetUrl.hostname);
+
+    if (!response.ok) {
+      console.error('[Proxy] Error response:', response.status, await response.text().catch(() => ''));
+      return NextResponse.json(
+        { error: `Upstream error: ${response.status}` },
+        { status: response.status }
+      );
+    }
 
     const contentType = response.headers.get('content-type') || 'application/octet-stream';
 
