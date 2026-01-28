@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useEffect, useState, useCallback } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import videojs from 'video.js';
 import 'video.js/dist/video-js.css';
 import { ExternalLink, Smartphone } from 'lucide-react';
@@ -42,20 +42,28 @@ function proxyUrl(url: string, headers?: Record<string, string>): string {
 }
 
 function getSourceType(url: string): string {
-  const lower = url.toLowerCase();
-  if (lower.includes('.m3u8')) return 'application/x-mpegURL';
-  if (lower.includes('.mpd')) return 'application/dash+xml';
-  if (lower.includes('.mp4')) return 'video/mp4';
-  if (lower.includes('.webm')) return 'video/webm';
-  // Default to HLS for proxy URLs (most common)
-  if (url.startsWith('/api/proxy')) return 'application/x-mpegURL';
+  let urlToCheck = url.toLowerCase();
+  try {
+    if (url.includes('/api/proxy')) {
+      const proxyUrl = new URL(url, 'http://localhost');
+      const innerUrl = proxyUrl.searchParams.get('url');
+      if (innerUrl) {
+        urlToCheck = decodeURIComponent(innerUrl).toLowerCase();
+      }
+    }
+  } catch {}
+
+  if (urlToCheck.includes('.m3u8')) return 'application/x-mpegURL';
+  if (urlToCheck.includes('.mpd')) return 'application/dash+xml';
+  if (urlToCheck.includes('.mp4')) return 'video/mp4';
+  if (urlToCheck.includes('.webm')) return 'video/webm';
+  if (url.includes('/api/proxy')) return 'application/x-mpegURL';
   return 'video/mp4';
 }
 
 export function VideoPlayer({
   src,
   poster,
-  title,
   subtitles = [],
   headers,
   startTime = 0,
@@ -64,12 +72,16 @@ export function VideoPlayer({
   onPlay,
   onPause,
 }: VideoPlayerProps) {
-  const videoRef = useRef<HTMLDivElement | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const playerRef = useRef<Player | null>(null);
   const [isMobile, setIsMobile] = useState(false);
   const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const lastProgressRef = useRef<number>(0);
   const [debugLogs, setDebugLogs] = useState<string[]>([]);
+
+  // Store callbacks in refs to avoid re-initialization
+  const callbacksRef = useRef({ onProgress, onEnded, onPlay, onPause });
+  callbacksRef.current = { onProgress, onEnded, onPlay, onPause };
 
   const addLog = (msg: string) => {
     setDebugLogs(prev => [...prev.slice(-10), `${new Date().toLocaleTimeString()}: ${msg}`]);
@@ -84,38 +96,23 @@ export function VideoPlayer({
         ) || window.innerWidth < 768
       );
     };
-
     checkMobile();
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  // Open in VLC
-  const openInVLC = () => {
-    const vlcUrl = `vlc://${src}`;
-    window.location.href = vlcUrl;
-  };
-
-  // Open in external player (for Android)
-  const openInExternalPlayer = () => {
-    const intentUrl = `intent:${src}#Intent;type=video/*;end`;
-    window.location.href = intentUrl;
-  };
-
-  // Copy URL to clipboard
-  const copyStreamUrl = () => {
-    navigator.clipboard.writeText(src);
-    alert('Stream URL copied to clipboard!');
-  };
-
-  // Open stream in new tab
-  const openInNewTab = () => {
-    window.open(src, '_blank');
-  };
-
-  // Initialize Video.js
+  // Initialize Video.js - ONLY when src changes
   useEffect(() => {
-    if (!videoRef.current) return;
+    if (!containerRef.current) return;
+
+    // Clean up previous player first
+    if (playerRef.current) {
+      playerRef.current.dispose();
+      playerRef.current = null;
+    }
+
+    // Clear container
+    containerRef.current.innerHTML = '';
 
     addLog('Initializing Video.js...');
 
@@ -126,13 +123,13 @@ export function VideoPlayer({
       addLog(`Proxied URL: ${finalUrl.substring(0, 60)}...`);
     }
 
-    const sourceType = getSourceType(src);
+    const sourceType = getSourceType(finalUrl);
     addLog(`Source type: ${sourceType}`);
 
     // Create video element
     const videoElement = document.createElement('video');
     videoElement.classList.add('video-js', 'vjs-big-play-centered', 'vjs-fluid');
-    videoRef.current.appendChild(videoElement);
+    containerRef.current.appendChild(videoElement);
 
     // Initialize player
     const player = videojs(videoElement, {
@@ -172,7 +169,7 @@ export function VideoPlayer({
       }, false);
     });
 
-    // Event handlers
+    // Event handlers - use ref for callbacks
     player.on('loadedmetadata', () => {
       addLog('Video metadata loaded');
       if (startTime > 0) {
@@ -182,23 +179,23 @@ export function VideoPlayer({
 
     player.on('play', () => {
       addLog('Playing');
-      onPlay?.();
+      callbacksRef.current.onPlay?.();
     });
 
     player.on('pause', () => {
       const currentTime = player.currentTime() || 0;
       const duration = player.duration() || 0;
       if (currentTime > 0) {
-        onProgress?.(currentTime, duration);
-        onPause?.();
+        callbacksRef.current.onProgress?.(currentTime, duration);
+        callbacksRef.current.onPause?.();
       }
     });
 
     player.on('ended', () => {
       addLog('Ended');
       const duration = player.duration() || 0;
-      onProgress?.(duration, duration);
-      onEnded?.();
+      callbacksRef.current.onProgress?.(duration, duration);
+      callbacksRef.current.onEnded?.();
     });
 
     player.on('error', () => {
@@ -209,13 +206,13 @@ export function VideoPlayer({
 
     // Progress tracking
     progressIntervalRef.current = setInterval(() => {
-      if (player && !player.paused()) {
-        const currentTime = player.currentTime() || 0;
-        const duration = player.duration() || 0;
+      if (playerRef.current && !playerRef.current.paused()) {
+        const currentTime = playerRef.current.currentTime() || 0;
+        const duration = playerRef.current.duration() || 0;
 
         if (Math.abs(currentTime - lastProgressRef.current) >= 5) {
           lastProgressRef.current = currentTime;
-          onProgress?.(currentTime, duration);
+          callbacksRef.current.onProgress?.(currentTime, duration);
         }
       }
     }, 5000);
@@ -225,18 +222,37 @@ export function VideoPlayer({
     return () => {
       if (progressIntervalRef.current) {
         clearInterval(progressIntervalRef.current);
+        progressIntervalRef.current = null;
       }
       if (playerRef.current) {
         playerRef.current.dispose();
         playerRef.current = null;
       }
     };
-  }, [src, headers, poster, startTime, subtitles, onProgress, onEnded, onPlay, onPause]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [src]); // ONLY re-init when src changes!
+
+  const openInVLC = () => {
+    window.location.href = `vlc://${src}`;
+  };
+
+  const openInExternalPlayer = () => {
+    window.location.href = `intent:${src}#Intent;type=video/*;end`;
+  };
+
+  const copyStreamUrl = () => {
+    navigator.clipboard.writeText(src);
+    alert('Stream URL copied to clipboard!');
+  };
+
+  const openInNewTab = () => {
+    window.open(src, '_blank');
+  };
 
   return (
     <div className="relative w-full">
       <div className="w-full aspect-video bg-black rounded-xl overflow-hidden">
-        <div ref={videoRef} data-vjs-player />
+        <div ref={containerRef} data-vjs-player />
       </div>
 
       <motion.div
@@ -280,25 +296,13 @@ export function VideoPlayer({
       </motion.div>
 
       <div className="hidden md:flex items-center justify-center gap-6 mt-4 text-xs text-zinc-500">
-        <span>
-          <kbd className="px-1.5 py-0.5 bg-zinc-800 rounded">Space</kbd> Play/Pause
-        </span>
-        <span>
-          <kbd className="px-1.5 py-0.5 bg-zinc-800 rounded">Left</kbd>
-          <kbd className="px-1.5 py-0.5 bg-zinc-800 rounded">Right</kbd> Seek 10s
-        </span>
-        <span>
-          <kbd className="px-1.5 py-0.5 bg-zinc-800 rounded">F</kbd> Fullscreen
-        </span>
-        <span>
-          <kbd className="px-1.5 py-0.5 bg-zinc-800 rounded">M</kbd> Mute
-        </span>
-        <span>
-          <kbd className="px-1.5 py-0.5 bg-zinc-800 rounded">C</kbd> Captions
-        </span>
+        <span><kbd className="px-1.5 py-0.5 bg-zinc-800 rounded">Space</kbd> Play/Pause</span>
+        <span><kbd className="px-1.5 py-0.5 bg-zinc-800 rounded">Left</kbd><kbd className="px-1.5 py-0.5 bg-zinc-800 rounded">Right</kbd> Seek 10s</span>
+        <span><kbd className="px-1.5 py-0.5 bg-zinc-800 rounded">F</kbd> Fullscreen</span>
+        <span><kbd className="px-1.5 py-0.5 bg-zinc-800 rounded">M</kbd> Mute</span>
+        <span><kbd className="px-1.5 py-0.5 bg-zinc-800 rounded">C</kbd> Captions</span>
       </div>
 
-      {/* Debug logs */}
       {debugLogs.length > 0 && (
         <div className="mt-4 p-3 bg-zinc-900 rounded-lg text-xs font-mono text-green-400 max-h-48 overflow-y-auto">
           <div className="font-bold text-white mb-2">Debug Log:</div>
