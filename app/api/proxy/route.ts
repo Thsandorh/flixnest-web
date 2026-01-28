@@ -49,6 +49,12 @@ export async function GET(request: NextRequest) {
     });
 
     const contentType = response.headers.get('content-type') || 'application/octet-stream';
+    const isM3u8Request =
+      decodedUrl.includes('.m3u8') ||
+      contentType.includes('application/x-mpegurl') ||
+      contentType.includes('application/vnd.apple.mpegurl');
+
+    // Debug logging disabled for performance
 
     // Prepare response headers
     const responseHeaders: HeadersInit = {
@@ -85,12 +91,12 @@ export async function GET(request: NextRequest) {
           'Cache-Control': 'no-store, max-age=0, must-revalidate',
         },
       });
-    } else if (contentType.includes('text/') || contentType.includes('application/x-mpegurl') || contentType.includes('application/vnd.apple.mpegurl')) {
-      // Handle m3u8 playlists - need to proxy URLs inside them
+    } else if (contentType.includes('text/') || isM3u8Request) {
+      // Handle text responses and m3u8 playlists (even if served as octet-stream)
       const text = await response.text();
 
       // If it's an m3u8 file, proxy the URLs inside
-      if (decodedUrl.includes('.m3u8') || contentType.includes('mpegurl')) {
+      if (isM3u8Request) {
         const baseUrl = decodedUrl.substring(0, decodedUrl.lastIndexOf('/') + 1);
 
         // Helper to build an absolute URL and wrap it with our proxy
@@ -116,33 +122,40 @@ export async function GET(request: NextRequest) {
           return `/api/proxy?${params.toString()}`;
         };
 
+        const rewriteTagUris = (line: string) => {
+          if (!line.includes('URI=')) return line;
+          return line.replace(/URI=("([^"]+)"|[^",\s]+)/g, (match) => {
+            const quoted = match.startsWith('URI="');
+            const raw = quoted ? match.slice(5, -1) : match.slice(4);
+            const proxied = toProxiedUrl(raw);
+            return quoted ? `URI="${proxied}"` : `URI=${proxied}`;
+          });
+        };
+
         const proxiedM3u8 = text
           .split('\n')
           .map((line) => {
             const trimmed = line.trim();
 
-            // Proxy URIs embedded inside directive lines (keys, maps, audio/subs, etc.)
-            if (trimmed.startsWith('#EXT')) {
-              const rewritten = trimmed.replace(
-                /URI=(\"|')(.*?)(\1)/gi,
-                (_match, quote, uri) => `URI=${quote}${toProxiedUrl(uri)}${quote}`
-              );
-              return rewritten;
+            if (trimmed === '') return line;
+
+            if (trimmed.startsWith('#')) {
+              // Proxy URI attributes in tag lines (#EXT-X-KEY, #EXT-X-MAP, #EXT-X-MEDIA, etc.)
+              return rewriteTagUris(line);
             }
 
-            // Keep other comments as-is
-            if (trimmed.startsWith('#') || trimmed === '') {
-              return line;
-            }
-
-            // Proxy media segment or playlist URLs
+            // Proxy non-comment lines (media segments, sub-playlists)
             return toProxiedUrl(trimmed);
           })
           .join('\n');
 
         return new NextResponse(proxiedM3u8, {
           status: response.status,
-          headers: responseHeaders,
+          headers: {
+            ...responseHeaders,
+            'Content-Type': 'application/vnd.apple.mpegurl',
+            'Cache-Control': 'no-store, max-age=0, must-revalidate',
+          },
         });
       }
 

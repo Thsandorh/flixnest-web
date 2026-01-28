@@ -45,15 +45,23 @@ function isDash(url: string): boolean {
 }
 
 function proxyUrl(url: string, headers?: Record<string, string>): string {
+  const referer = headers?.Referer || headers?.referer;
+  const ua = headers?.['User-Agent'] || headers?.['user-agent'];
+
   if (url.startsWith('/api/proxy')) {
-    return url;
+    try {
+      const base = typeof window !== 'undefined' ? window.location.origin : 'http://localhost';
+      const u = new URL(url, base);
+      if (referer && !u.searchParams.get('referer')) u.searchParams.set('referer', referer);
+      if (ua && !u.searchParams.get('ua')) u.searchParams.set('ua', ua);
+      return `${u.pathname}?${u.searchParams.toString()}`;
+    } catch {
+      return url;
+    }
   }
 
   const params = new URLSearchParams();
   params.set('url', url);
-
-  const referer = headers?.Referer || headers?.referer;
-  const ua = headers?.['User-Agent'] || headers?.['user-agent'];
   if (referer) params.set('referer', referer);
   if (ua) params.set('ua', ua);
 
