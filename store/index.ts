@@ -40,27 +40,45 @@ export interface WatchlistItem {
 // Addon Store
 interface AddonState {
   addons: Addon[];
-  activeAddon: Addon | null;
+  activeAddons: Addon[];
   addAddon: (addon: Addon) => void;
   removeAddon: (id: string) => void;
-  setActiveAddon: (addon: Addon | null) => void;
+  toggleActiveAddon: (addon: Addon) => void;
   getAddonByManifest: (manifest: string) => Addon | undefined;
 }
 
-const DEFAULT_ADDON: Addon = {
-  id: 'webstreamr',
-  name: 'WebStreamr',
-  manifest: 'https://webstreamr.hayd.uk/manifest.json',
-  version: '1.0.0',
-  description: 'High-quality web streams',
-  types: ['movie', 'series'],
-};
+const DEFAULT_ADDONS: Addon[] = [
+  {
+    id: 'webstreamr',
+    name: 'WebStreamr',
+    manifest: 'https://webstreamr.hayd.uk/manifest.json',
+    version: '1.0.0',
+    description: 'High-quality web streams',
+    types: ['movie', 'series'],
+  },
+  {
+    id: 'flixnest-webstreamr',
+    name: 'Flixnest WebStreamr',
+    manifest: 'https://flixnest.app/addon/webstreamr/manifest.json',
+    version: '1.0.0',
+    description: 'Flixnest hosted web streams',
+    types: ['movie', 'series'],
+  },
+  {
+    id: 'nuviostreams',
+    name: 'NuvioStreams',
+    manifest: 'https://nuviostreams.hayd.uk/manifest.json',
+    version: '1.0.0',
+    description: 'NuvioStreams web sources',
+    types: ['movie', 'series'],
+  },
+];
 
 export const useAddonStore = create<AddonState>()(
   persist(
     (set, get) => ({
-      addons: [DEFAULT_ADDON],
-      activeAddon: DEFAULT_ADDON,
+      addons: DEFAULT_ADDONS,
+      activeAddons: DEFAULT_ADDONS,
 
       addAddon: (addon) =>
         set((state) => {
@@ -70,13 +88,30 @@ export const useAddonStore = create<AddonState>()(
         }),
 
       removeAddon: (id) =>
-        set((state) => ({
-          addons: state.addons.filter((a) => a.id !== id),
-          activeAddon:
-            state.activeAddon?.id === id ? state.addons[0] || null : state.activeAddon,
-        })),
+        set((state) => {
+          const remainingAddons = state.addons.filter((a) => a.id !== id);
+          const remainingActive = state.activeAddons.filter((a) => a.id !== id);
+          return {
+            addons: remainingAddons,
+            activeAddons:
+              remainingActive.length > 0
+                ? remainingActive
+                : remainingAddons.length > 0
+                  ? [remainingAddons[0]]
+                  : [],
+          };
+        }),
 
-      setActiveAddon: (addon) => set({ activeAddon: addon }),
+      toggleActiveAddon: (addon) =>
+        set((state) => {
+          const isActive = state.activeAddons.some((a) => a.id === addon.id);
+          if (isActive) {
+            return {
+              activeAddons: state.activeAddons.filter((a) => a.id !== addon.id),
+            };
+          }
+          return { activeAddons: [...state.activeAddons, addon] };
+        }),
 
       getAddonByManifest: (manifest) => get().addons.find((a) => a.manifest === manifest),
     }),

@@ -28,7 +28,7 @@ import {
   useWatchlistStore,
   useAddonStore,
 } from '@/store';
-import { getStreams, getSubtitles, getExternalIds, parseStreamInfo, type Stream } from '@/lib/stremio';
+import { getStreamsFromMultipleAddons, getSubtitles, getExternalIds, parseStreamInfo, type Stream } from '@/lib/stremio';
 
 const TMDB_API_KEY = 'ffe7ef8916c61835264d2df68276ddc2';
 const TMDB_BASE = 'https://api.themoviedb.org/3';
@@ -78,9 +78,14 @@ export default function WatchPage() {
   const [isSeasonExpanded, setIsSeasonExpanded] = useState(true);
   const [isStreamListExpanded, setIsStreamListExpanded] = useState(false);
 
-  const { activeAddon } = useAddonStore();
+  const { activeAddons } = useAddonStore();
   const { isInWatchlist, toggleWatchlist } = useWatchlistStore();
   const { history, updateProgress, markEpisodeWatched, isEpisodeWatched, getEpisodeProgress } = useHistoryStore();
+
+  const isAutoPlayableStream = (stream: Stream) => {
+    const source = (stream.name || stream.title || '').toLowerCase();
+    return source.includes('vixsrc') || source.includes('vidscr');
+  };
 
   // Fetch media details
   const { data: details, isLoading: detailsLoading } = useQuery({
@@ -121,7 +126,14 @@ export default function WatchPage() {
 
   // Fetch streams when ready
   useEffect(() => {
-    if (!imdbId || !activeAddon) return;
+    if (!imdbId) return;
+    if (activeAddons.length === 0) {
+      setAvailableStreams([]);
+      setSelectedStream(null);
+      setStreamUrl(null);
+      setStreamError('No active addons. Enable at least one on the Addons page.');
+      return;
+    }
 
     const fetchStreams = async () => {
       setIsLoadingStream(true);
@@ -129,8 +141,8 @@ export default function WatchPage() {
 
       try {
         const stremioType = type === 'tv' ? 'series' : 'movie';
-        const streams = await getStreams(
-          activeAddon.manifest,
+        const streams = await getStreamsFromMultipleAddons(
+          activeAddons.map((addon) => addon.manifest),
           stremioType,
           imdbId,
           type === 'tv' ? selectedSeason : undefined,
@@ -139,12 +151,18 @@ export default function WatchPage() {
 
         if (streams.length > 0) {
           setAvailableStreams(streams);
-          // Auto-select first stream
-          if (streams[0].url) {
-            setSelectedStream(streams[0]);
-            setStreamUrl(streams[0].url);
-            const info = parseStreamInfo(streams[0]);
+          const autoPlayableStream = streams.find((stream) =>
+            isAutoPlayableStream(stream)
+          );
+          if (autoPlayableStream?.url) {
+            setSelectedStream(autoPlayableStream);
+            setStreamUrl(autoPlayableStream.url);
+            const info = parseStreamInfo(autoPlayableStream);
             toast.success(`Found ${streams.length} stream(s) - Playing ${info.quality}`);
+          } else {
+            setSelectedStream(null);
+            setStreamUrl(null);
+            setStreamError('Only VixSrc or VidScr streams can be auto-played.');
           }
         } else {
           setAvailableStreams([]);
@@ -176,7 +194,7 @@ export default function WatchPage() {
     };
 
     fetchStreams();
-  }, [imdbId, activeAddon, type, selectedSeason, selectedEpisode]);
+  }, [imdbId, activeAddons, type, selectedSeason, selectedEpisode]);
 
   // Update URL when episode changes
   useEffect(() => {
@@ -264,14 +282,19 @@ export default function WatchPage() {
   };
 
   const handleStreamSelect = (stream: Stream) => {
-    if (stream.url) {
-      setSelectedStream(stream);
-      setStreamUrl(stream.url);
-      const info = parseStreamInfo(stream);
-      toast.success(`Switched to ${info.quality} - ${info.source}`);
-      setIsStreamListExpanded(false);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (!stream.url) return;
+
+    if (!isAutoPlayableStream(stream)) {
+      toast.info('This link opens in an external player.');
+      return;
     }
+
+    setSelectedStream(stream);
+    setStreamUrl(stream.url);
+    const info = parseStreamInfo(stream);
+    toast.success(`Switched to ${info.quality} - ${info.source}`);
+    setIsStreamListExpanded(false);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const inWatchlist = isInWatchlist(tmdbId);
@@ -384,6 +407,7 @@ export default function WatchPage() {
                     const streamInfo = parseStreamInfo(stream);
                     const isSelected = selectedStream?.url === stream.url;
                     const isM3u8 = stream.url?.includes('.m3u8') || stream.url?.includes('m3u8');
+                    const isAutoPlayable = isAutoPlayableStream(stream);
 
                     return (
                       <button
@@ -404,6 +428,11 @@ export default function WatchPage() {
                           <div className="text-left">
                             <div className="font-medium flex items-center gap-2">
                               {streamInfo.source}
+                              {!isAutoPlayable && (
+                                <span className="px-2 py-0.5 bg-amber-600/20 text-amber-300 rounded text-xs">
+                                  Open in external player
+                                </span>
+                              )}
                               {isM3u8 && (
                                 <span className="px-2 py-0.5 bg-blue-600/20 text-blue-400 rounded text-xs">
                                   HLS

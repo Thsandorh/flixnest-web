@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useEffect, useState } from 'react';
-import { ExternalLink, Smartphone } from 'lucide-react';
+import { ExternalLink } from 'lucide-react';
 
 interface VideoPlayerProps {
   src: string;
@@ -92,24 +92,23 @@ export function VideoPlayer({
       </div>
 
       <div className="flex flex-wrap gap-3 mt-4">
-        {isMobile && (
-          <>
-            <button
-              onClick={() => { window.location.href = `vlc://${src}`; }}
-              className="flex-1 min-w-[120px] flex items-center justify-center gap-2 px-4 py-3 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-medium"
-            >
-              <ExternalLink className="w-5 h-5" />
-              VLC
-            </button>
-            <button
-              onClick={() => { window.location.href = `intent:${src}#Intent;type=video/*;end`; }}
-              className="flex-1 min-w-[120px] flex items-center justify-center gap-2 px-4 py-3 bg-zinc-700 hover:bg-zinc-600 text-white rounded-lg font-medium"
-            >
-              <Smartphone className="w-5 h-5" />
-              External
-            </button>
-          </>
-        )}
+        <button
+          onClick={() => {
+            if (navigator.share) {
+              navigator.share({ title: title || 'Video', url: src });
+              return;
+            }
+            if (isMobile) {
+              window.location.href = `intent:${src}#Intent;type=video/*;end`;
+              return;
+            }
+            window.open(src, '_blank');
+          }}
+          className="flex-1 min-w-[160px] flex items-center justify-center gap-2 px-4 py-3 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-medium"
+        >
+          <ExternalLink className="w-5 h-5" />
+          Open in external player
+        </button>
         <button
           onClick={() => { navigator.clipboard.writeText(src); alert('Copied!'); }}
           className="flex-1 min-w-[120px] px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium text-sm"
