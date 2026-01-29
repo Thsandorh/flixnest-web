@@ -19,6 +19,7 @@ interface VideoPlayerProps {
 export function VideoPlayer({
   src,
   poster,
+  title,
   subtitles = [],
   startTime = 0,
   onProgress,
