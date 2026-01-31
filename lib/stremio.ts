@@ -188,7 +188,7 @@ export async function getStreams(
   }
 }
 
-// Get subtitles from Subhero addon (default)
+// Get subtitles from Submaker addon (default)
 export async function getSubtitles(
   imdbId: string,
   type: 'movie' | 'series' | 'tv',
@@ -197,13 +197,13 @@ export async function getSubtitles(
 ): Promise<Subtitle[]> {
   try {
     const stremioType = type === 'tv' || type === 'series' ? 'series' : 'movie';
-    const subheroUrl = 'https://subhero.strem.io';
+    const submakerUrl = 'https://submaker.elfhosted.com/addon/92cb93e70850fc1b980c7794d2608e85';
 
     let subtitleUrl: string;
     if (stremioType === 'series' && season !== undefined && episode !== undefined) {
-      subtitleUrl = `${subheroUrl}/subtitles/${stremioType}/${imdbId}:${season}:${episode}.json`;
+      subtitleUrl = `${submakerUrl}/subtitles/${stremioType}/${imdbId}:${season}:${episode}.json`;
     } else {
-      subtitleUrl = `${subheroUrl}/subtitles/${stremioType}/${imdbId}.json`;
+      subtitleUrl = `${submakerUrl}/subtitles/${stremioType}/${imdbId}.json`;
     }
 
     const response = await axios.get<{ subtitles: Subtitle[] }>(proxyUrl(subtitleUrl), {

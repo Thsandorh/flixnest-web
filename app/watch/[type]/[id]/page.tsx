@@ -238,12 +238,27 @@ export default function WatchPage() {
 
   const playbackUrl = selectedStream?.url ?? null;
 
+  const buildVlcPlaylistLink = (
+    url: string,
+    subtitleList: Array<{ src: string }>,
+    headers?: Record<string, string>
+  ) => {
+    const proxiedStream = buildProxyUrl(url, headers);
+    const params = new URLSearchParams();
+    params.set('stream', proxiedStream);
+    subtitleList.forEach((subtitle) => {
+      params.append('sub', buildProxyUrl(subtitle.src));
+    });
+    const playlistUrl = `${window.location.origin}/api/vlc-playlist?${params.toString()}`;
+    return `vlc://${encodeURIComponent(playlistUrl)}`;
+  };
+
   const playerOptions = [
     {
       id: 'vlc',
       name: 'VLC',
       description: 'Android, iOS, Desktop',
-      getLink: (url: string) => `vlc://${encodeURIComponent(url)}`,
+      getLink: (url: string) => buildVlcPlaylistLink(url, subtitles, selectedStream?.headers),
     },
     {
       id: 'infuse',
@@ -415,7 +430,7 @@ export default function WatchPage() {
                 <ul className="space-y-2 text-sm text-zinc-400">
                   <li>• Torrentio esetén a debrid beállítása az addonon belül történik.</li>
                   <li>• A scraper addonok csak listáznak — lejátszás mindig külső appban történik.</li>
-                  <li>• Alap feliratforrás: Subhero Stremio addon.</li>
+                  <li>• Alap feliratforrás: Submaker Stremio addon.</li>
                 </ul>
               </div>
             </div>
@@ -546,7 +561,7 @@ export default function WatchPage() {
 
             {subtitles.length > 0 && (
               <div className="mb-8">
-                <h2 className="text-lg font-semibold text-white mb-3">Feliratok (Subhero)</h2>
+                <h2 className="text-lg font-semibold text-white mb-3">Feliratok (Submaker)</h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {subtitles.map((subtitle) => (
                     <div

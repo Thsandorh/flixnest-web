@@ -222,8 +222,23 @@ export function VideoPlayer({
   };
 
   // Open in external player
+  const buildVlcPlaylistUrl = useCallback(() => {
+    if (typeof window === 'undefined') {
+      return `vlc://${encodeURIComponent(src)}`;
+    }
+
+    const params = new URLSearchParams();
+    params.set('stream', getProxiedUrl(src));
+    subtitles.forEach((subtitle) => {
+      params.append('sub', buildProxyUrl(subtitle.src));
+    });
+
+    const playlistUrl = `${window.location.origin}/api/vlc-playlist?${params.toString()}`;
+    return `vlc://${encodeURIComponent(playlistUrl)}`;
+  }, [getProxiedUrl, src, subtitles]);
+
   const handleExternalPlayer = () => {
-    window.location.href = `vlc://${src}`;
+    window.location.href = buildVlcPlaylistUrl();
   };
 
   return (
