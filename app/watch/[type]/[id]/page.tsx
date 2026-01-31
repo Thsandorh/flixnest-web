@@ -169,6 +169,9 @@ export default function WatchPage() {
           // Auto-select first browser-playable stream
           const playableStream = uniqueStreams.find(isPlayableInBrowser);
           if (playableStream?.url) {
+            console.log('[Watch] Selected stream:', playableStream);
+            console.log('[Watch] Stream headers:', playableStream.headers);
+            console.log('[Watch] Behavior hints:', playableStream.behaviorHints);
             setSelectedStream(playableStream);
             setStreamUrl(playableStream.url);
             const info = parseStreamInfo(playableStream);
