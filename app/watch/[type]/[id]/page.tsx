@@ -236,9 +236,7 @@ export default function WatchPage() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const playbackUrl = selectedStream?.url
-    ? buildProxyUrl(selectedStream.url, selectedStream.headers)
-    : null;
+  const playbackUrl = selectedStream?.url ?? null;
 
   const playerOptions = [
     {
