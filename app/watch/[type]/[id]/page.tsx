@@ -23,7 +23,7 @@ import { useQuery } from '@tanstack/react-query';
 import axios from 'axios';
 import { toast } from 'sonner';
 
-import { VidstackPlayer } from '@/components/player/vidstack-player';
+import { DebugPlayer } from '@/components/player/debug-player';
 import { MediaCard } from '@/components/ui/media-card';
 import {
   useHistoryStore,
@@ -360,7 +360,7 @@ export default function WatchPage() {
               </div>
             </div>
           ) : streamUrl ? (
-            <VidstackPlayer
+            <DebugPlayer
               src={streamUrl}
               poster={`https://image.tmdb.org/t/p/w1280${details.backdrop_path}`}
               title={
@@ -368,8 +368,6 @@ export default function WatchPage() {
                   ? `${details.name} - S${selectedSeason}:E${selectedEpisode}`
                   : details.title
               }
-              onProgress={handleProgressUpdate}
-              onEnded={handleEnded}
             />
           ) : availableStreams.length > 0 ? (
             <div className="aspect-video bg-gradient-to-br from-zinc-900 to-zinc-800 rounded-xl flex items-center justify-center">
