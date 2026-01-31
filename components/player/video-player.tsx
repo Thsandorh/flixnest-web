@@ -7,6 +7,7 @@ import {
   type HLSSrc,
   type MediaPlayerInstance,
   type MediaTimeUpdateEvent,
+  type MediaTimeUpdateEventDetail,
   type MediaDurationChangeEvent,
   type PlayerSrc,
 } from '@vidstack/react';
@@ -73,9 +74,9 @@ export function VideoPlayer({
   }, [startTime, resolvedSrc]);
 
   const handleTimeUpdate = useCallback(
-    (event: MediaTimeUpdateEvent) => {
+    (detail: MediaTimeUpdateEventDetail, _event: MediaTimeUpdateEvent) => {
       if (!onProgress || duration <= 0) return;
-      const currentTime = event.detail.currentTime;
+      const currentTime = detail.currentTime;
       if (currentTime - lastProgressRef.current >= 5 || currentTime >= duration) {
         lastProgressRef.current = currentTime;
         onProgress(currentTime, duration);
@@ -84,8 +85,8 @@ export function VideoPlayer({
     [onProgress, duration]
   );
 
-  const handleDurationChange = useCallback((event: MediaDurationChangeEvent) => {
-    const nextDuration = event.detail || 0;
+  const handleDurationChange = useCallback((detail: number, _event: MediaDurationChangeEvent) => {
+    const nextDuration = detail || 0;
     if (Number.isFinite(nextDuration)) {
       setDuration(nextDuration);
     }
