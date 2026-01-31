@@ -2,7 +2,8 @@
 
 import { useRef, useEffect, useState } from 'react';
 import Hls from 'hls.js';
-import { ExternalLink, Copy } from 'lucide-react';
+import { ExternalLink, Copy, Share2 } from 'lucide-react';
+import { buildProxyUrl, getVlcProxyHeaders } from '@/lib/stream-utils';
 
 interface SimpleVideoPlayerProps {
   src: string;
@@ -38,9 +39,15 @@ export function SimpleVideoPlayer({
     }
 
     setError(null);
+
+    // Use proxy for external URLs to bypass CORS
+    const isExternal = src.startsWith('http://') || src.startsWith('https://');
+    const proxyHeaders = getVlcProxyHeaders(src);
+    const finalUrl = isExternal ? buildProxyUrl(src, proxyHeaders) : src;
     const isM3U8 = src.includes('.m3u8');
 
-    console.log('[SimplePlayer] Source:', src.substring(0, 100));
+    console.log('[SimplePlayer] Original URL:', src.substring(0, 100));
+    console.log('[SimplePlayer] Proxied URL:', finalUrl.substring(0, 150));
     console.log('[SimplePlayer] Is M3U8:', isM3U8);
 
     // For M3U8 streams, use HLS.js on Chrome/Firefox, native on Safari/iOS
@@ -54,7 +61,7 @@ export function SimpleVideoPlayer({
         });
 
         hlsRef.current = hls;
-        hls.loadSource(src);
+        hls.loadSource(finalUrl);
         hls.attachMedia(video);
 
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
@@ -71,14 +78,14 @@ export function SimpleVideoPlayer({
 
       } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
         console.log('[SimplePlayer] Using native HLS (Safari/iOS)');
-        video.src = src;
+        video.src = finalUrl;
       } else {
         console.error('[SimplePlayer] HLS not supported');
         setError('Your browser does not support HLS playback');
       }
     } else {
       console.log('[SimplePlayer] Using native playback');
-      video.src = src;
+      video.src = finalUrl;
     }
 
     return () => {
@@ -132,6 +139,32 @@ export function SimpleVideoPlayer({
     return () => video.removeEventListener('ended', onEnded);
   }, [onEnded]);
 
+  const handleExternalPlayer = async () => {
+    // Try Web Share API first (works on most mobile browsers)
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: title || 'Play Video',
+          url: src,
+        });
+        return;
+      } catch (err) {
+        console.log('[SimplePlayer] Share cancelled or failed:', err);
+      }
+    }
+
+    // Fallback: Try VLC intent for Android
+    const isAndroid = /android/i.test(navigator.userAgent);
+    if (isAndroid) {
+      // Android Intent to open with any video player
+      const intent = `intent://${src.replace(/^https?:\/\//, '')}#Intent;type=video/*;scheme=https;end`;
+      window.location.href = intent;
+    } else {
+      // iOS/Desktop: Try VLC protocol
+      window.location.href = `vlc://${src}`;
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="relative w-full aspect-video bg-black rounded-xl overflow-hidden">
@@ -153,10 +186,10 @@ export function SimpleVideoPlayer({
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/90 text-white p-4">
             <p className="text-center mb-4">{error}</p>
             <button
-              onClick={() => (window.location.href = `vlc://${src}`)}
+              onClick={handleExternalPlayer}
               className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 rounded-lg"
             >
-              <ExternalLink className="w-5 h-5" /> Open in VLC
+              <Share2 className="w-5 h-5" /> Open in External Player
             </button>
           </div>
         )}
@@ -173,10 +206,10 @@ export function SimpleVideoPlayer({
           <Copy className="w-4 h-4" /> Copy URL
         </button>
         <button
-          onClick={() => (window.location.href = `vlc://${src}`)}
+          onClick={handleExternalPlayer}
           className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-sm transition-colors"
         >
-          <ExternalLink className="w-4 h-4" /> Open in VLC
+          <Share2 className="w-4 h-4" /> Open in External Player
         </button>
       </div>
     </div>
