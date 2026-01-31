@@ -3,6 +3,7 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import Hls from 'hls.js';
 import { Play, Pause, Volume2, VolumeX, Maximize, ExternalLink, Copy, AlertTriangle } from 'lucide-react';
+import { buildProxyUrl, getVlcProxyHeaders } from '@/lib/stream-utils';
 
 interface VideoPlayerProps {
   src: string;
@@ -63,12 +64,12 @@ export function VideoPlayer({
     setIsLoading(true);
     setError(null);
 
-    // Play directly without proxy
-    const finalUrl = src;
-    console.log('[Player] Playing:', src.substring(0, 80));
+    const isExternal = src.startsWith('http://') || src.startsWith('https://');
+    const proxyHeaders = getVlcProxyHeaders(src, headers);
+    const finalUrl = isExternal ? buildProxyUrl(src, proxyHeaders) : src;
+    console.log('[Player] Playing:', finalUrl.substring(0, 80));
 
     // Try HLS.js for external streams (most vixsrc/vidsrc streams are HLS)
-    const isExternal = src.startsWith('http://') || src.startsWith('https://');
     const useHls = isExternal || src.includes('.m3u8');
 
     if (useHls && Hls.isSupported()) {
