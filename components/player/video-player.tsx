@@ -2,322 +2,295 @@
 
 import { useRef, useEffect, useState, useCallback } from 'react';
 import Hls from 'hls.js';
-import { Play, Pause, Volume2, VolumeX, Maximize, ExternalLink, Copy, AlertTriangle } from 'lucide-react';
-import { buildProxyUrl, getVlcProxyHeaders } from '@/lib/stream-utils';
+import { AlertCircle, RefreshCw, Copy, ExternalLink } from 'lucide-react';
+import { buildProxyUrl, isHlsUrl } from '@/lib/stream-utils';
 
 interface VideoPlayerProps {
   src: string;
+  headers?: Record<string, string>;
   poster?: string;
   title?: string;
-  subtitles?: { src: string; label: string; srclang: string }[];
-  headers?: Record<string, string>;
   startTime?: number;
+  subtitles?: Array<{ src: string; label: string; srclang: string }>;
   onProgress?: (currentTime: number, duration: number) => void;
   onEnded?: () => void;
-  onPlay?: () => void;
-  onPause?: () => void;
 }
 
 export function VideoPlayer({
   src,
-  poster,
-  subtitles = [],
   headers,
+  poster,
+  title,
   startTime = 0,
+  subtitles = [],
   onProgress,
   onEnded,
-  onPlay,
-  onPause,
 }: VideoPlayerProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
-
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
+  const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [showControls, setShowControls] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const fatalErrorCountRef = useRef(0);
-
-  const formatTime = (seconds: number) => {
-    if (!seconds || !isFinite(seconds)) return '0:00';
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
+  // Build the proxied URL
+  const getProxiedUrl = useCallback((url: string): string => {
+    // Skip if already proxied
+    if (url.includes('/api/proxy?')) {
+      return url;
+    }
+    // Always proxy external URLs
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      return buildProxyUrl(url, headers);
+    }
+    return url;
+  }, [headers]);
 
   // Initialize player
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !src) return;
 
-    // Cleanup
+    // Cleanup previous HLS instance
     if (hlsRef.current) {
       hlsRef.current.destroy();
       hlsRef.current = null;
     }
 
-    setIsLoading(true);
     setError(null);
-    fatalErrorCountRef.current = 0;
+    setIsLoading(true);
 
-    const isExternal = src.startsWith('http://') || src.startsWith('https://');
-    const proxyHeaders = getVlcProxyHeaders(src, headers);
-    const finalUrl = isExternal ? buildProxyUrl(src, proxyHeaders) : src;
-    console.log('[Player] Original URL:', src.substring(0, 100));
-    console.log('[Player] Proxied URL:', finalUrl.substring(0, 150));
+    const proxiedUrl = getProxiedUrl(src);
+    const isHls = isHlsUrl(src);
 
-    // Try HLS.js for external streams (most vixsrc/vidsrc streams are HLS)
-    const useHls = isExternal || src.includes('.m3u8');
+    console.log('[VideoPlayer] Source:', src.substring(0, 80));
+    console.log('[VideoPlayer] Proxied:', proxiedUrl.substring(0, 100));
+    console.log('[VideoPlayer] Is HLS:', isHls);
 
-    if (useHls && Hls.isSupported()) {
-      console.log('[Player] Using HLS.js');
+    if (isHls) {
+      // HLS stream
+      if (Hls.isSupported()) {
+        console.log('[VideoPlayer] Using HLS.js');
+        const hls = new Hls({
+          debug: false,
+          enableWorker: true,
+          lowLatencyMode: false,
+          maxBufferLength: 30,
+          maxMaxBufferLength: 60,
+          maxBufferSize: 60 * 1000 * 1000, // 60MB
+          maxBufferHole: 0.5,
+          fragLoadingTimeOut: 20000,
+          manifestLoadingTimeOut: 10000,
+          levelLoadingTimeOut: 10000,
+        });
 
-      const hls = new Hls({
-        debug: false,
-        enableWorker: true,
-        lowLatencyMode: false,
-        backBufferLength: 60,
-        maxBufferLength: 30,
-        startLevel: -1,
-      });
+        hlsRef.current = hls;
 
-      hlsRef.current = hls;
+        hls.on(Hls.Events.MANIFEST_PARSED, (_, data) => {
+          console.log('[VideoPlayer] Manifest parsed, levels:', data.levels.length);
+          setIsLoading(false);
+          video.play().catch(e => console.warn('[VideoPlayer] Autoplay blocked:', e.message));
+        });
 
-      hls.on(Hls.Events.MANIFEST_PARSED, (_, data) => {
-        console.log('[Player] Manifest OK, levels:', data.levels.length);
-        setIsLoading(false);
-        if (startTime > 0) video.currentTime = startTime;
-        video.play().catch(() => {});
-      });
+        hls.on(Hls.Events.ERROR, (_, data) => {
+          console.error('[VideoPlayer] HLS Error:', data.type, data.details);
 
-      hls.on(Hls.Events.ERROR, (_, data) => {
-        console.error('[Player] HLS Error:', data.type, data.details);
-
-        if (data.fatal) {
-          if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
-            console.log('[Player] Network error, retrying...');
-            fatalErrorCountRef.current += 1;
-
-            if (fatalErrorCountRef.current > 2) {
-              console.log('[Player] Too many network errors, giving up.');
-              hls.destroy();
-              hlsRef.current = null;
-              setError('Playback failed - try VLC');
-              setIsLoading(false);
-              return;
+          if (data.fatal) {
+            switch (data.type) {
+              case Hls.ErrorTypes.NETWORK_ERROR:
+                console.log('[VideoPlayer] Network error, attempting recovery...');
+                hls.startLoad();
+                break;
+              case Hls.ErrorTypes.MEDIA_ERROR:
+                console.log('[VideoPlayer] Media error, attempting recovery...');
+                hls.recoverMediaError();
+                break;
+              default:
+                setError(`Playback failed: ${data.details}`);
+                setIsLoading(false);
+                break;
             }
-
-            setTimeout(() => hls.startLoad(), 2000);
-          } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
-            console.log('[Player] Media error, recovering...');
-            hls.recoverMediaError();
-          } else {
-            // Try direct video as fallback
-            console.log('[Player] HLS failed, trying direct...');
-            hls.destroy();
-            hlsRef.current = null;
-            video.src = finalUrl;
-            video.load();
-            video.play().catch(() => {
-              setError('Playback failed - try VLC');
-              setIsLoading(false);
-            });
           }
-        }
-      });
+        });
 
-      hls.loadSource(finalUrl);
-      hls.attachMedia(video);
+        hls.loadSource(proxiedUrl);
+        hls.attachMedia(video);
 
-    } else if (useHls && video.canPlayType('application/vnd.apple.mpegurl')) {
-      // Safari native HLS
-      console.log('[Player] Safari native HLS');
-      video.src = finalUrl;
-      video.addEventListener('loadedmetadata', () => {
+      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        // Safari native HLS
+        console.log('[VideoPlayer] Using native HLS (Safari)');
+        video.src = proxiedUrl;
+        video.addEventListener('loadedmetadata', () => {
+          setIsLoading(false);
+          video.play().catch(e => console.warn('[VideoPlayer] Autoplay blocked:', e.message));
+        }, { once: true });
+      } else {
+        setError('Your browser does not support HLS playback');
         setIsLoading(false);
-        if (startTime > 0) video.currentTime = startTime;
-        video.play().catch(() => {});
-      }, { once: true });
-
+      }
     } else {
-      // Direct video
-      console.log('[Player] Direct video');
-      video.src = finalUrl;
+      // Direct video (MP4, etc.)
+      console.log('[VideoPlayer] Using native video');
+      video.src = proxiedUrl;
       video.addEventListener('loadedmetadata', () => {
         setIsLoading(false);
-        if (startTime > 0) video.currentTime = startTime;
-      }, { once: true });
-      video.addEventListener('error', () => {
-        setError('Cannot play this format');
-        setIsLoading(false);
+        video.play().catch(e => console.warn('[VideoPlayer] Autoplay blocked:', e.message));
       }, { once: true });
     }
 
+    // Handle native video errors
+    const handleError = () => {
+      const mediaError = video.error;
+      console.error('[VideoPlayer] Video error:', mediaError?.code, mediaError?.message);
+      setError(mediaError?.message || 'Video playback failed');
+      setIsLoading(false);
+    };
+
+    video.addEventListener('error', handleError);
+
     return () => {
+      video.removeEventListener('error', handleError);
       if (hlsRef.current) {
         hlsRef.current.destroy();
         hlsRef.current = null;
       }
     };
-  }, [src, headers, startTime]);
+  }, [src, getProxiedUrl]);
 
-  // Event handlers
+  // Set start time
   useEffect(() => {
+    const video = videoRef.current;
+    if (!video || startTime <= 0) return;
+
+    const handleLoaded = () => {
+      if (startTime > 0 && startTime < video.duration) {
+        video.currentTime = startTime;
+      }
+    };
+
+    video.addEventListener('loadedmetadata', handleLoaded);
+    return () => video.removeEventListener('loadedmetadata', handleLoaded);
+  }, [startTime]);
+
+  // Progress tracking
+  useEffect(() => {
+    if (!onProgress) return;
+
     const video = videoRef.current;
     if (!video) return;
 
-    const onVideoPlay = () => { setIsPlaying(true); onPlay?.(); };
-    const onVideoPause = () => { setIsPlaying(false); onPause?.(); };
-    const onTimeUpdate = () => {
-      setCurrentTime(video.currentTime);
-      if (video.duration) setDuration(video.duration);
-    };
-    const onVideoEnded = () => { setIsPlaying(false); onEnded?.(); };
-    const onWaiting = () => setIsLoading(true);
-    const onCanPlay = () => setIsLoading(false);
-
-    video.addEventListener('play', onVideoPlay);
-    video.addEventListener('pause', onVideoPause);
-    video.addEventListener('timeupdate', onTimeUpdate);
-    video.addEventListener('ended', onVideoEnded);
-    video.addEventListener('waiting', onWaiting);
-    video.addEventListener('canplay', onCanPlay);
-
-    return () => {
-      video.removeEventListener('play', onVideoPlay);
-      video.removeEventListener('pause', onVideoPause);
-      video.removeEventListener('timeupdate', onTimeUpdate);
-      video.removeEventListener('ended', onVideoEnded);
-      video.removeEventListener('waiting', onWaiting);
-      video.removeEventListener('canplay', onCanPlay);
-    };
-  }, [onPlay, onPause, onEnded]);
-
-  // Progress reporting
-  useEffect(() => {
-    if (!onProgress || !duration) return;
-    const interval = setInterval(() => {
-      if (videoRef.current && !videoRef.current.paused) {
-        onProgress(videoRef.current.currentTime, duration);
+    progressIntervalRef.current = setInterval(() => {
+      if (!video.paused && video.duration > 0) {
+        onProgress(video.currentTime, video.duration);
       }
     }, 5000);
-    return () => clearInterval(interval);
-  }, [onProgress, duration]);
 
-  // Controls visibility
-  const showControlsTemporarily = useCallback(() => {
-    setShowControls(true);
-    if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
-    controlsTimeoutRef.current = setTimeout(() => {
-      if (isPlaying) setShowControls(false);
-    }, 3000);
-  }, [isPlaying]);
+    return () => {
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current);
+      }
+    };
+  }, [onProgress]);
 
-  const togglePlay = () => {
+  // Handle ended
+  useEffect(() => {
     const video = videoRef.current;
-    if (video) video.paused ? video.play().catch(() => {}) : video.pause();
-  };
+    if (!video || !onEnded) return;
 
-  const toggleMute = () => {
+    video.addEventListener('ended', onEnded);
+    return () => video.removeEventListener('ended', onEnded);
+  }, [onEnded]);
+
+  // Retry playback
+  const handleRetry = () => {
+    setError(null);
+    setIsLoading(true);
+
+    if (hlsRef.current) {
+      hlsRef.current.destroy();
+      hlsRef.current = null;
+    }
+
     const video = videoRef.current;
-    if (video) { video.muted = !video.muted; setIsMuted(video.muted); }
-  };
-
-  const seek = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (videoRef.current) videoRef.current.currentTime = Number(e.target.value);
-  };
-
-  const toggleFullscreen = () => {
-    const container = containerRef.current;
-    if (container) {
-      document.fullscreenElement ? document.exitFullscreen() : container.requestFullscreen();
+    if (video) {
+      video.load();
     }
   };
 
+  // Copy URL to clipboard
+  const handleCopyUrl = () => {
+    navigator.clipboard.writeText(src);
+  };
+
+  // Open in external player
+  const handleExternalPlayer = () => {
+    window.location.href = `vlc://${src}`;
+  };
+
   return (
-    <div className="space-y-4">
-      <div
-        ref={containerRef}
-        className="relative w-full aspect-video bg-black rounded-xl overflow-hidden"
-        onMouseMove={showControlsTemporarily}
-        onMouseLeave={() => isPlaying && setShowControls(false)}
+    <div className="relative w-full aspect-video bg-black rounded-xl overflow-hidden">
+      <video
+        ref={videoRef}
+        poster={poster}
+        controls
+        controlsList="nodownload"
+        playsInline
+        className="w-full h-full"
+        crossOrigin="anonymous"
       >
-        <video
-          ref={videoRef}
-          className="w-full h-full"
-          poster={poster}
-          playsInline
-          onClick={togglePlay}
-        >
-          {subtitles.map((t, i) => (
-            <track key={i} src={t.src} kind="subtitles" label={t.label} srcLang={t.srclang} />
-          ))}
-        </video>
+        {subtitles.map((sub, idx) => (
+          <track
+            key={idx}
+            kind="subtitles"
+            src={buildProxyUrl(sub.src)}
+            label={sub.label}
+            srcLang={sub.srclang}
+          />
+        ))}
+      </video>
 
-        {/* Loading */}
-        {isLoading && !error && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/60">
-            <div className="w-12 h-12 border-4 border-white/30 border-t-white rounded-full animate-spin" />
+      {/* Loading overlay */}
+      {isLoading && !error && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/60">
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-10 h-10 border-4 border-red-500 border-t-transparent rounded-full animate-spin" />
+            <p className="text-white text-sm">Loading stream...</p>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Error */}
-        {error && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/90 text-white p-4">
-            <AlertTriangle className="w-12 h-12 text-red-500 mb-4" />
-            <p className="text-center mb-4">{error}</p>
-            <button
-              onClick={() => window.location.href = `vlc://${src}`}
-              className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 rounded-lg"
-            >
-              <ExternalLink className="w-5 h-5" /> Open in VLC
-            </button>
-          </div>
-        )}
+      {/* Error overlay */}
+      {error && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/90">
+          <div className="flex flex-col items-center gap-4 p-6 max-w-md text-center">
+            <AlertCircle className="w-12 h-12 text-red-500" />
+            <p className="text-white font-medium">{error}</p>
 
-        {/* Controls */}
-        {!error && (
-          <div className={`absolute inset-0 transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
-            <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black/80 to-transparent" />
-
-            <button onClick={togglePlay} className="absolute inset-0 flex items-center justify-center">
-              <div className="p-4 bg-black/50 rounded-full backdrop-blur-sm hover:bg-black/70">
-                {isPlaying ? <Pause className="w-10 h-10 text-white" /> : <Play className="w-10 h-10 text-white ml-1" />}
-              </div>
-            </button>
-
-            <div className="absolute inset-x-0 bottom-0 p-4 space-y-2">
-              <input
-                type="range" min={0} max={duration || 100} value={currentTime} onChange={seek}
-                className="w-full h-1 bg-white/30 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-red-500 [&::-webkit-slider-thumb]:rounded-full"
-              />
-              <div className="flex items-center justify-between text-white">
-                <div className="flex items-center gap-4">
-                  <button onClick={togglePlay}>{isPlaying ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6" />}</button>
-                  <button onClick={toggleMute}>{isMuted ? <VolumeX className="w-6 h-6" /> : <Volume2 className="w-6 h-6" />}</button>
-                  <span className="text-sm">{formatTime(currentTime)} / {formatTime(duration)}</span>
-                </div>
-                <button onClick={toggleFullscreen}><Maximize className="w-6 h-6" /></button>
-              </div>
+            <div className="flex flex-wrap justify-center gap-3">
+              <button
+                onClick={handleRetry}
+                className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Retry
+              </button>
+              <button
+                onClick={handleCopyUrl}
+                className="flex items-center gap-2 px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-white rounded-lg transition-colors"
+              >
+                <Copy className="w-4 h-4" />
+                Copy URL
+              </button>
+              <button
+                onClick={handleExternalPlayer}
+                className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors"
+              >
+                <ExternalLink className="w-4 h-4" />
+                Open in VLC
+              </button>
             </div>
           </div>
-        )}
-      </div>
-
-      <div className="flex flex-wrap gap-3">
-        <button onClick={() => { navigator.clipboard.writeText(src); alert('Copied!'); }} className="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg text-sm">
-          <Copy className="w-4 h-4" /> Copy URL
-        </button>
-        <button onClick={() => window.location.href = `vlc://${src}`} className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-sm">
-          <ExternalLink className="w-4 h-4" /> Open in VLC
-        </button>
-      </div>
+        </div>
+      )}
     </div>
   );
 }
