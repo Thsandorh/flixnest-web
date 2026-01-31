@@ -144,6 +144,7 @@ export async function GET(request: NextRequest) {
       if (isM3u8Url || isM3u8Content) {
         const baseUrl = decodedUrl.substring(0, decodedUrl.lastIndexOf('/') + 1);
         const urlOrigin = targetUrl.origin;
+        const requestOrigin = request.nextUrl.origin;
 
         let playlistText = text;
         const trimmed = playlistText.trim();
@@ -207,8 +208,11 @@ export async function GET(request: NextRequest) {
             if (refererParam) params.set('referer', refererParam);
             if (uaParam) params.set('ua', uaParam);
           }
-          return `/api/proxy?${params.toString()}`;
+          // Return absolute URL for HLS.js compatibility
+          return `${requestOrigin}/api/proxy?${params.toString()}`;
         };
+
+        console.log('[Proxy] Rewriting M3U8 URLs with origin:', requestOrigin);
 
         const proxiedM3u8 = normalizedText
           .split('\n')
