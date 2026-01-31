@@ -23,7 +23,7 @@ import { useQuery } from '@tanstack/react-query';
 import axios from 'axios';
 import { toast } from 'sonner';
 
-import { SimpleVideoPlayer } from '@/components/player/simple-video-player';
+import { VidstackPlayer } from '@/components/player/vidstack-player';
 import { MediaCard } from '@/components/ui/media-card';
 import {
   useHistoryStore,
@@ -360,7 +360,7 @@ export default function WatchPage() {
               </div>
             </div>
           ) : streamUrl ? (
-            <SimpleVideoPlayer
+            <VidstackPlayer
               src={streamUrl}
               poster={`https://image.tmdb.org/t/p/w1280${details.backdrop_path}`}
               title={
