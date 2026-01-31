@@ -28,8 +28,10 @@ export const buildVlcUrl = (url: string) => {
 export const getVlcProxyHeaders = (
   url: string,
   headers?: Record<string, string>
-) => {
-  const defaults = isHlsUrl(url) ? { 'User-Agent': VLC_USER_AGENT } : {};
+): Record<string, string> | undefined => {
+  const defaults: Record<string, string> = isHlsUrl(url)
+    ? { 'User-Agent': VLC_USER_AGENT }
+    : {};
 
   if (!headers || Object.keys(headers).length === 0) {
     return Object.keys(defaults).length > 0 ? defaults : undefined;
