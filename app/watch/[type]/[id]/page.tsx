@@ -15,15 +15,13 @@ import {
   ChevronRight,
   AlertCircle,
   Loader2,
-  MonitorPlay,
-  ExternalLink,
-  Tv,
+  Radio,
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import axios from 'axios';
 import { toast } from 'sonner';
 
-import { SimpleVideoPlayer } from '@/components/player/simple-video-player';
+import { VideoPlayer } from '@/components/player/video-player';
 import { MediaCard } from '@/components/ui/media-card';
 import {
   useHistoryStore,
@@ -31,23 +29,9 @@ import {
   useAddonStore,
 } from '@/store';
 import { getStreams, getSubtitles, parseStreamInfo, type Stream } from '@/lib/stremio';
-import { buildVlcUrl } from '@/lib/stream-utils';
 
 const TMDB_API_KEY = 'ffe7ef8916c61835264d2df68276ddc2';
 const TMDB_BASE = 'https://api.themoviedb.org/3';
-
-// Sources that can be played in browser
-const BROWSER_PLAYABLE_SOURCES = ['vixsrc', 'vidsrc', 'vidscr'];
-
-function isPlayableInBrowser(stream: Stream): boolean {
-  const url = stream.url?.toLowerCase() || '';
-  const name = (stream.name || stream.title || '').toLowerCase();
-
-  // IGNORE notWebReady - try to play anyway with proxy
-  return BROWSER_PLAYABLE_SOURCES.some(source =>
-    url.includes(source) || name.includes(source)
-  );
-}
 
 interface Episode {
   id: number;
@@ -87,7 +71,6 @@ export default function WatchPage() {
   );
   const [availableStreams, setAvailableStreams] = useState<Stream[]>([]);
   const [selectedStream, setSelectedStream] = useState<Stream | null>(null);
-  const [streamUrl, setStreamUrl] = useState<string | null>(null);
   const [subtitles, setSubtitles] = useState<Array<{ src: string; label: string; srclang: string }>>([]);
   const [isLoadingStream, setIsLoadingStream] = useState(false);
   const [streamError, setStreamError] = useState<string | null>(null);
@@ -167,20 +150,13 @@ export default function WatchPage() {
         if (uniqueStreams.length > 0) {
           setAvailableStreams(uniqueStreams);
 
-          // Auto-select first browser-playable stream
-          const playableStream = uniqueStreams.find(isPlayableInBrowser);
-          if (playableStream?.url) {
-            console.log('[Watch] Selected stream:', playableStream);
-            console.log('[Watch] Stream headers:', playableStream.headers);
-            console.log('[Watch] Behavior hints:', playableStream.behaviorHints);
-            setSelectedStream(playableStream);
-            setStreamUrl(playableStream.url);
-            const info = parseStreamInfo(playableStream);
+          // Auto-select first stream
+          const firstStream = uniqueStreams[0];
+          if (firstStream?.url) {
+            console.log('[Watch] Auto-selecting stream:', firstStream.name || firstStream.title);
+            setSelectedStream(firstStream);
+            const info = parseStreamInfo(firstStream);
             toast.success(`Found ${uniqueStreams.length} stream(s) - Playing ${info.source}`);
-          } else {
-            setSelectedStream(null);
-            setStreamUrl(null);
-            toast.info(`Found ${uniqueStreams.length} stream(s) - Use VLC to play`);
           }
         } else {
           setAvailableStreams([]);
@@ -287,7 +263,6 @@ export default function WatchPage() {
   const handleEpisodeClick = (season: number, episode: number) => {
     setSelectedSeason(season);
     setSelectedEpisode(episode);
-    setStreamUrl(null);
     setAvailableStreams([]);
     setSelectedStream(null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -296,18 +271,11 @@ export default function WatchPage() {
   const handleStreamSelect = (stream: Stream) => {
     if (!stream.url) return;
 
-    if (isPlayableInBrowser(stream)) {
-      setSelectedStream(stream);
-      setStreamUrl(stream.url);
-      const info = parseStreamInfo(stream);
-      toast.success(`Playing ${info.source}`);
-      setIsStreamListExpanded(false);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    } else {
-      // Open in VLC
-      window.location.href = buildVlcUrl(stream.url);
-      toast.info('Opening in VLC...');
-    }
+    setSelectedStream(stream);
+    const info = parseStreamInfo(stream);
+    toast.success(`Playing ${info.source} - ${info.quality}`);
+    setIsStreamListExpanded(false);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const inWatchlist = isInWatchlist(tmdbId);
@@ -323,10 +291,6 @@ export default function WatchPage() {
     });
     toast.success(inWatchlist ? 'Removed from list' : 'Added to list');
   };
-
-  // Separate streams into playable and VLC-only
-  const playableStreams = availableStreams.filter(isPlayableInBrowser);
-  const vlcOnlyStreams = availableStreams.filter(s => !isPlayableInBrowser(s));
 
   if (detailsLoading) {
     return (
@@ -363,33 +327,20 @@ export default function WatchPage() {
                 <p className="text-white font-semibold">{streamError}</p>
               </div>
             </div>
-          ) : streamUrl ? (
-            <SimpleVideoPlayer
-              src={streamUrl}
+          ) : selectedStream?.url ? (
+            <VideoPlayer
+              src={selectedStream.url}
+              headers={selectedStream.headers}
               poster={`https://image.tmdb.org/t/p/w1280${details.backdrop_path}`}
               title={
                 type === 'tv'
                   ? `${details.name} - S${selectedSeason}:E${selectedEpisode}`
                   : details.title
               }
+              subtitles={subtitles}
               onProgress={handleProgressUpdate}
               onEnded={handleEnded}
             />
-          ) : availableStreams.length > 0 ? (
-            <div className="aspect-video bg-gradient-to-br from-zinc-900 to-zinc-800 rounded-xl flex items-center justify-center">
-              <div className="flex flex-col items-center gap-6 text-center px-8">
-                <div className="p-4 bg-orange-500/20 rounded-full">
-                  <Tv className="w-12 h-12 text-orange-500" />
-                </div>
-                <div>
-                  <h3 className="text-xl font-bold text-white mb-2">VLC Player Required</h3>
-                  <p className="text-zinc-400 max-w-md">
-                    Found {availableStreams.length} stream(s), but they require VLC or external player.
-                    Select a stream below to open in VLC.
-                  </p>
-                </div>
-              </div>
-            </div>
           ) : (
             <div className="aspect-video bg-zinc-900 rounded-xl flex items-center justify-center">
               <p className="text-zinc-400">No streams available</p>
@@ -399,102 +350,76 @@ export default function WatchPage() {
 
         {/* Stream Selector */}
         {availableStreams.length > 0 && (
-          <div className="mb-6 space-y-4">
-            {/* Browser Playable Streams */}
-            {playableStreams.length > 0 && (
-              <div>
-                <button
-                  onClick={() => setIsStreamListExpanded(!isStreamListExpanded)}
-                  className="flex items-center justify-between w-full px-4 py-3 bg-green-900/30 border border-green-800 rounded-lg hover:bg-green-900/50 transition-colors"
-                >
-                  <div className="flex items-center gap-3">
-                    <Play className="w-5 h-5 text-green-500" />
-                    <span className="text-white font-medium">
-                      Browser Playable ({playableStreams.length})
-                    </span>
-                  </div>
-                  <ChevronDown className={`w-5 h-5 text-zinc-400 transition-transform ${isStreamListExpanded ? 'rotate-180' : ''}`} />
-                </button>
-
-                <AnimatePresence>
-                  {isStreamListExpanded && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: 'auto' }}
-                      exit={{ opacity: 0, height: 0 }}
-                      className="mt-2 space-y-2"
-                    >
-                      {playableStreams.map((stream, index) => {
-                        const streamInfo = parseStreamInfo(stream);
-                        const isSelected = selectedStream?.url === stream.url;
-
-                        return (
-                          <button
-                            key={index}
-                            onClick={() => handleStreamSelect(stream)}
-                            className={`w-full flex items-center justify-between p-4 rounded-lg transition-all ${
-                              isSelected
-                                ? 'bg-green-600 text-white'
-                                : 'bg-zinc-900 text-zinc-300 hover:bg-zinc-800'
-                            }`}
-                          >
-                            <div className="flex items-center gap-3">
-                              {isSelected ? <Check className="w-5 h-5" /> : <Play className="w-5 h-5 text-zinc-600" />}
-                              <div className="text-left">
-                                <div className="font-medium">{streamInfo.source}</div>
-                                <div className="text-xs opacity-75">{stream.name || 'Stream'}</div>
-                              </div>
-                            </div>
-                            <span className={`px-3 py-1 rounded-full text-sm font-medium ${isSelected ? 'bg-white/20' : 'bg-zinc-800'}`}>
-                              {streamInfo.quality}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+          <div className="mb-6">
+            <button
+              onClick={() => setIsStreamListExpanded(!isStreamListExpanded)}
+              className="flex items-center justify-between w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg hover:bg-zinc-700 transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <Radio className="w-5 h-5 text-red-500" />
+                <span className="text-white font-medium">
+                  {availableStreams.length} Stream(s) Available
+                </span>
+                {selectedStream && (
+                  <span className="text-zinc-400 text-sm">
+                    - Currently: {parseStreamInfo(selectedStream).source}
+                  </span>
+                )}
               </div>
-            )}
+              <ChevronDown className={`w-5 h-5 text-zinc-400 transition-transform ${isStreamListExpanded ? 'rotate-180' : ''}`} />
+            </button>
 
-            {/* VLC Only Streams */}
-            {vlcOnlyStreams.length > 0 && (
-              <div>
-                <div className="flex items-center justify-between w-full px-4 py-3 bg-orange-900/30 border border-orange-800 rounded-lg">
-                  <div className="flex items-center gap-3">
-                    <ExternalLink className="w-5 h-5 text-orange-500" />
-                    <span className="text-white font-medium">
-                      VLC / External Player ({vlcOnlyStreams.length})
-                    </span>
-                  </div>
-                </div>
-
-                <div className="mt-2 space-y-2">
-                  {vlcOnlyStreams.map((stream, index) => {
+            <AnimatePresence>
+              {isStreamListExpanded && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="mt-2 space-y-2"
+                >
+                  {availableStreams.map((stream, index) => {
                     const streamInfo = parseStreamInfo(stream);
+                    const isSelected = selectedStream?.url === stream.url;
 
                     return (
                       <button
                         key={index}
                         onClick={() => handleStreamSelect(stream)}
-                        className="w-full flex items-center justify-between p-4 rounded-lg bg-zinc-900 text-zinc-300 hover:bg-zinc-800 transition-all"
+                        className={`w-full flex items-center justify-between p-4 rounded-lg transition-all ${
+                          isSelected
+                            ? 'bg-red-600 text-white'
+                            : 'bg-zinc-900 text-zinc-300 hover:bg-zinc-800'
+                        }`}
                       >
                         <div className="flex items-center gap-3">
-                          <ExternalLink className="w-5 h-5 text-orange-500" />
+                          {isSelected ? (
+                            <Check className="w-5 h-5" />
+                          ) : (
+                            <Play className="w-5 h-5 text-zinc-600" />
+                          )}
                           <div className="text-left">
                             <div className="font-medium">{streamInfo.source}</div>
-                            <div className="text-xs text-orange-400">Opens in VLC</div>
+                            <div className="text-xs opacity-75">
+                              {stream.name || stream.title || 'Stream'}
+                            </div>
                           </div>
                         </div>
-                        <span className="px-3 py-1 rounded-full text-sm font-medium bg-zinc-800">
-                          {streamInfo.quality}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          {streamInfo.size && (
+                            <span className="text-xs opacity-75">{streamInfo.size}</span>
+                          )}
+                          <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                            isSelected ? 'bg-white/20' : 'bg-zinc-800'
+                          }`}>
+                            {streamInfo.quality}
+                          </span>
+                        </div>
                       </button>
                     );
                   })}
-                </div>
-              </div>
-            )}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         )}
 

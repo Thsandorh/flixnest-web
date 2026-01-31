@@ -1,10 +1,15 @@
-const VLC_USER_AGENT = 'VLC/3.0.18 LibVLC/3.0.18';
+// Check if URL is an HLS/M3U8 stream
+export function isHlsUrl(url: string): boolean {
+  const lower = url.toLowerCase();
+  return lower.includes('.m3u8');
+}
 
-export const isHlsUrl = (url: string) =>
-  /\.m3u8(\?.*)?$/i.test(url) || url.toLowerCase().includes('m3u8');
-
-export const buildProxyUrl = (url: string, headers?: Record<string, string>) => {
-  if (url.includes('/api/proxy?')) return url;
+// Build proxy URL for a stream
+export function buildProxyUrl(url: string, headers?: Record<string, string>): string {
+  // Don't double-proxy
+  if (url.includes('/api/proxy?')) {
+    return url;
+  }
 
   const params = new URLSearchParams();
   params.set('url', url);
@@ -13,37 +18,10 @@ export const buildProxyUrl = (url: string, headers?: Record<string, string>) => 
     params.set('headers', JSON.stringify(headers));
   }
 
-  // Use absolute URL for better compatibility with HLS.js, especially on mobile
-  const proxyPath = `/api/proxy?${params.toString()}`;
-
-  // In browser context, prepend origin; otherwise return relative path (SSR)
+  // Use absolute URL in browser, relative in SSR
   if (typeof window !== 'undefined') {
-    return `${window.location.origin}${proxyPath}`;
+    return `${window.location.origin}/api/proxy?${params.toString()}`;
   }
 
-  return proxyPath;
-};
-
-export const buildVlcUrl = (url: string) => {
-  const trimmed = url.trim();
-  const withoutScheme = trimmed.startsWith('vlc://')
-    ? trimmed.slice('vlc://'.length)
-    : trimmed;
-
-  return `vlc://${encodeURI(withoutScheme)}`;
-};
-
-export const getVlcProxyHeaders = (
-  url: string,
-  headers?: Record<string, string>
-): Record<string, string> | undefined => {
-  const defaults: Record<string, string> = isHlsUrl(url)
-    ? { 'User-Agent': VLC_USER_AGENT }
-    : {};
-
-  if (!headers || Object.keys(headers).length === 0) {
-    return Object.keys(defaults).length > 0 ? defaults : undefined;
-  }
-
-  return { ...defaults, ...headers };
-};
+  return `/api/proxy?${params.toString()}`;
+}
