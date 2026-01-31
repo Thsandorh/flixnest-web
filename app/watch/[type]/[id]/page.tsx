@@ -23,7 +23,7 @@ import { useQuery } from '@tanstack/react-query';
 import axios from 'axios';
 import { toast } from 'sonner';
 
-import { DebugPlayer } from '@/components/player/debug-player';
+import { SimpleVideoPlayer } from '@/components/player/simple-video-player';
 import { MediaCard } from '@/components/ui/media-card';
 import {
   useHistoryStore,
@@ -43,6 +43,7 @@ function isPlayableInBrowser(stream: Stream): boolean {
   const url = stream.url?.toLowerCase() || '';
   const name = (stream.name || stream.title || '').toLowerCase();
 
+  // IGNORE notWebReady - try to play anyway with proxy
   return BROWSER_PLAYABLE_SOURCES.some(source =>
     url.includes(source) || name.includes(source)
   );
@@ -363,7 +364,7 @@ export default function WatchPage() {
               </div>
             </div>
           ) : streamUrl ? (
-            <DebugPlayer
+            <SimpleVideoPlayer
               src={streamUrl}
               poster={`https://image.tmdb.org/t/p/w1280${details.backdrop_path}`}
               title={
@@ -371,8 +372,8 @@ export default function WatchPage() {
                   ? `${details.name} - S${selectedSeason}:E${selectedEpisode}`
                   : details.title
               }
-              streamHeaders={selectedStream?.headers}
-              behaviorHints={selectedStream?.behaviorHints}
+              onProgress={handleProgressUpdate}
+              onEnded={handleEnded}
             />
           ) : availableStreams.length > 0 ? (
             <div className="aspect-video bg-gradient-to-br from-zinc-900 to-zinc-800 rounded-xl flex items-center justify-center">
