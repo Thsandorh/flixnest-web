@@ -188,7 +188,7 @@ export async function getStreams(
   }
 }
 
-// Get subtitles from OpenSubtitles addon
+// Get subtitles from Subhero addon (default)
 export async function getSubtitles(
   imdbId: string,
   type: 'movie' | 'series' | 'tv',
@@ -197,13 +197,13 @@ export async function getSubtitles(
 ): Promise<Subtitle[]> {
   try {
     const stremioType = type === 'tv' || type === 'series' ? 'series' : 'movie';
-    const openSubsUrl = 'https://opensubtitles-v3.strem.io';
+    const subheroUrl = 'https://subhero.strem.io';
 
     let subtitleUrl: string;
     if (stremioType === 'series' && season !== undefined && episode !== undefined) {
-      subtitleUrl = `${openSubsUrl}/subtitles/${stremioType}/${imdbId}:${season}:${episode}.json`;
+      subtitleUrl = `${subheroUrl}/subtitles/${stremioType}/${imdbId}:${season}:${episode}.json`;
     } else {
-      subtitleUrl = `${openSubsUrl}/subtitles/${stremioType}/${imdbId}.json`;
+      subtitleUrl = `${subheroUrl}/subtitles/${stremioType}/${imdbId}.json`;
     }
 
     const response = await axios.get<{ subtitles: Subtitle[] }>(proxyUrl(subtitleUrl), {
