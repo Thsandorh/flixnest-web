@@ -330,7 +330,6 @@ export default function WatchPage() {
           ) : selectedStream?.url ? (
             <VideoPlayer
               src={selectedStream.url}
-              headers={selectedStream.headers}
               poster={`https://image.tmdb.org/t/p/w1280${details.backdrop_path}`}
               title={
                 type === 'tv'

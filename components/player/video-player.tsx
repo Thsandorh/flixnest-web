@@ -7,7 +7,6 @@ import { buildProxyUrl, isHlsUrl } from '@/lib/stream-utils';
 
 interface VideoPlayerProps {
   src: string;
-  headers?: Record<string, string>;
   poster?: string;
   title?: string;
   startTime?: number;
@@ -18,7 +17,6 @@ interface VideoPlayerProps {
 
 export function VideoPlayer({
   src,
-  headers,
   poster,
   title,
   startTime = 0,
@@ -32,18 +30,18 @@ export function VideoPlayer({
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Build the proxied URL
+  // Build the proxied URL (keep original for external playback)
   const getProxiedUrl = useCallback((url: string): string => {
     // Skip if already proxied
     if (url.includes('/api/proxy?')) {
       return url;
     }
-    // Always proxy external URLs
+    // External scraper links don't need proxying when using an external player
     if (url.startsWith('http://') || url.startsWith('https://')) {
-      return buildProxyUrl(url, headers);
+      return url;
     }
     return url;
-  }, [headers]);
+  }, []);
 
   // Initialize player
   useEffect(() => {
