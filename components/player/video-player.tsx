@@ -29,6 +29,23 @@ interface VideoPlayerProps {
   onPause?: () => void;
 }
 
+// Build proxy URL for CORS bypass
+function buildProxyUrl(url: string, headers?: Record<string, string>): string {
+  const params = new URLSearchParams();
+  params.set('url', url);
+  if (headers && Object.keys(headers).length > 0) {
+    params.set('headers', JSON.stringify(headers));
+  }
+  return `/api/proxy?${params.toString()}`;
+}
+
+// Check if URL needs proxy
+function needsProxy(url: string): boolean {
+  if (url.startsWith('/api/')) return false;
+  if (url.startsWith('blob:')) return false;
+  return url.startsWith('http://') || url.startsWith('https://');
+}
+
 export function VideoPlayer({
   src,
   poster,
@@ -45,105 +62,254 @@ export function VideoPlayer({
   const [duration, setDuration] = useState(0);
   const lastProgressRef = useRef(0);
 
-  const isHls = useMemo(() => isHlsUrl(src), [src]);
-  const proxyHeaders = useMemo(() => getVlcProxyHeaders(src, headers), [src, headers]);
-  const resolvedSrc = useMemo(() => {
-    if (!src) return src;
+  const formatTime = (seconds: number) => {
+    if (!seconds || !isFinite(seconds)) return '0:00';
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
 
-    if (isHls || (proxyHeaders && Object.keys(proxyHeaders).length > 0)) {
-      return buildProxyUrl(src, proxyHeaders);
+  // Initialize player
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !src) return;
+
+    // Cleanup
+    if (hlsRef.current) {
+      hlsRef.current.destroy();
+      hlsRef.current = null;
     }
 
-    return src;
-  }, [src, isHls, proxyHeaders]);
+    setIsLoading(true);
+    setError(null);
 
-  const mediaSrc = useMemo<PlayerSrc | undefined>(() => {
-    if (!resolvedSrc) return undefined;
+    // Use proxy for external URLs
+    const finalUrl = needsProxy(src) ? buildProxyUrl(src, headers) : src;
+    console.log('[Player] Original:', src.substring(0, 60));
+    console.log('[Player] Proxied:', finalUrl.substring(0, 80));
 
-    if (isHls) {
-      const hlsSrc: HLSSrc = { src: resolvedSrc, type: 'application/x-mpegurl' };
-      return hlsSrc;
+    // Detect HLS
+    const isHLS = src.includes('.m3u8') || src.includes('m3u8') ||
+                  src.includes('playlist') || src.includes('vixsrc') ||
+                  src.includes('vidsrc') || src.includes('vidscr');
+
+    if (isHLS && Hls.isSupported()) {
+      console.log('[Player] Using HLS.js');
+
+      const hls = new Hls({
+        debug: false,
+        enableWorker: true,
+        lowLatencyMode: false,
+        backBufferLength: 60,
+        maxBufferLength: 30,
+        startLevel: -1,
+      });
+
+      hlsRef.current = hls;
+
+      hls.on(Hls.Events.MANIFEST_PARSED, (_, data) => {
+        console.log('[Player] Manifest OK, levels:', data.levels.length);
+        setIsLoading(false);
+        video.play().catch(() => {});
+      });
+
+      hls.on(Hls.Events.ERROR, (_, data) => {
+        console.error('[Player] HLS Error:', data.type, data.details, data);
+
+        if (data.fatal) {
+          if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+            console.log('[Player] Retrying...');
+            setTimeout(() => hls.startLoad(), 2000);
+          } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+            hls.recoverMediaError();
+          } else {
+            setError('Playback failed');
+            setIsLoading(false);
+          }
+        }
+      });
+
+      hls.loadSource(finalUrl);
+      hls.attachMedia(video);
+
+    } else if (isHLS && video.canPlayType('application/vnd.apple.mpegurl')) {
+      console.log('[Player] Safari native HLS');
+      video.src = finalUrl;
+      video.addEventListener('loadedmetadata', () => {
+        setIsLoading(false);
+        if (startTime > 0) video.currentTime = startTime;
+        video.play().catch(() => {});
+      }, { once: true });
+
+    } else {
+      console.log('[Player] Direct video');
+      video.src = finalUrl;
+      video.addEventListener('loadedmetadata', () => {
+        setIsLoading(false);
+        if (startTime > 0) video.currentTime = startTime;
+      }, { once: true });
+      video.addEventListener('error', () => {
+        setError('Cannot play this format');
+        setIsLoading(false);
+      }, { once: true });
     }
 
-    return resolvedSrc;
-  }, [isHls, resolvedSrc]);
+    return () => {
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
+      }
+    };
+  }, [src, headers, startTime]);
+
+  // Event handlers
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const onVideoPlay = () => { setIsPlaying(true); onPlay?.(); };
+    const onVideoPause = () => { setIsPlaying(false); onPause?.(); };
+    const onTimeUpdate = () => {
+      setCurrentTime(video.currentTime);
+      if (video.duration) setDuration(video.duration);
+    };
+    const onVideoEnded = () => { setIsPlaying(false); onEnded?.(); };
+    const onWaiting = () => setIsLoading(true);
+    const onCanPlay = () => setIsLoading(false);
+
+    video.addEventListener('play', onVideoPlay);
+    video.addEventListener('pause', onVideoPause);
+    video.addEventListener('timeupdate', onTimeUpdate);
+    video.addEventListener('ended', onVideoEnded);
+    video.addEventListener('waiting', onWaiting);
+    video.addEventListener('canplay', onCanPlay);
+
+    return () => {
+      video.removeEventListener('play', onVideoPlay);
+      video.removeEventListener('pause', onVideoPause);
+      video.removeEventListener('timeupdate', onTimeUpdate);
+      video.removeEventListener('ended', onVideoEnded);
+      video.removeEventListener('waiting', onWaiting);
+      video.removeEventListener('canplay', onCanPlay);
+    };
+  }, [onPlay, onPause, onEnded]);
 
   useEffect(() => {
-    if (!playerRef.current || startTime <= 0) return;
-    playerRef.current.currentTime = startTime;
-  }, [startTime, resolvedSrc]);
-
-  const handleTimeUpdate = useCallback(
-    (detail: MediaTimeUpdateEventDetail, _event: MediaTimeUpdateEvent) => {
-      if (!onProgress || duration <= 0) return;
-      const currentTime = detail.currentTime;
-      if (currentTime - lastProgressRef.current >= 5 || currentTime >= duration) {
-        lastProgressRef.current = currentTime;
-        onProgress(currentTime, duration);
+    if (!onProgress || !duration) return;
+    const interval = setInterval(() => {
+      if (videoRef.current && !videoRef.current.paused) {
+        onProgress(videoRef.current.currentTime, duration);
       }
-    },
-    [onProgress, duration]
-  );
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [onProgress, duration]);
 
-  const handleDurationChange = useCallback((detail: number, _event: MediaDurationChangeEvent) => {
-    const nextDuration = detail || 0;
-    if (Number.isFinite(nextDuration)) {
-      setDuration(nextDuration);
+  // Controls visibility
+  const showControlsTemporarily = useCallback(() => {
+    setShowControls(true);
+    if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
+    controlsTimeoutRef.current = setTimeout(() => {
+      if (isPlaying) setShowControls(false);
+    }, 3000);
+  }, [isPlaying]);
+
+  const togglePlay = () => {
+    const video = videoRef.current;
+    if (video) video.paused ? video.play().catch(() => {}) : video.pause();
+  };
+
+  const toggleMute = () => {
+    const video = videoRef.current;
+    if (video) { video.muted = !video.muted; setIsMuted(video.muted); }
+  };
+
+  const seek = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (videoRef.current) videoRef.current.currentTime = Number(e.target.value);
+  };
+
+  const toggleFullscreen = () => {
+    const container = containerRef.current;
+    if (container) {
+      document.fullscreenElement ? document.exitFullscreen() : container.requestFullscreen();
     }
   }, []);
 
-  const copyUrl = () => {
-    navigator.clipboard.writeText(src);
-    alert('URL copied!');
-  };
-
-  const openInVLC = () => {
-    window.location.href = buildVlcUrl(src);
-  };
-
   return (
     <div className="space-y-4">
-      <MediaPlayer
-        ref={playerRef}
-        className="w-full"
-        src={mediaSrc}
-        poster={poster}
-        title={title}
-        playsInline
-        onTimeUpdate={handleTimeUpdate}
-        onDurationChange={handleDurationChange}
-        onEnded={onEnded}
-        onPlay={onPlay}
-        onPause={onPause}
+      <div
+        ref={containerRef}
+        className="relative w-full aspect-video bg-black rounded-xl overflow-hidden"
+        onMouseMove={showControlsTemporarily}
+        onMouseLeave={() => isPlaying && setShowControls(false)}
       >
-        <MediaProvider>
-          {subtitles.map((track, index) => (
-            <track
-              key={index}
-              src={track.src}
-              kind="subtitles"
-              label={track.label}
-              srcLang={track.srclang}
-            />
+        <video
+          ref={videoRef}
+          className="w-full h-full"
+          poster={poster}
+          playsInline
+          onClick={togglePlay}
+        >
+          {subtitles.map((t, i) => (
+            <track key={i} src={t.src} kind="subtitles" label={t.label} srcLang={t.srclang} />
           ))}
-        </MediaProvider>
-        <DefaultVideoLayout icons={defaultLayoutIcons} />
-      </MediaPlayer>
+        </video>
+
+        {/* Loading */}
+        {isLoading && !error && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/60">
+            <div className="w-12 h-12 border-4 border-white/30 border-t-white rounded-full animate-spin" />
+          </div>
+        )}
+
+        {/* Error */}
+        {error && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/90 text-white p-4">
+            <AlertTriangle className="w-12 h-12 text-red-500 mb-4" />
+            <p className="text-center mb-4">{error}</p>
+            <button
+              onClick={() => window.location.href = `vlc://${src}`}
+              className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 rounded-lg"
+            >
+              <ExternalLink className="w-5 h-5" /> Open in VLC
+            </button>
+          </div>
+        )}
+
+        {/* Controls */}
+        {!error && (
+          <div className={`absolute inset-0 transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+            <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black/80 to-transparent" />
+
+            <button onClick={togglePlay} className="absolute inset-0 flex items-center justify-center">
+              <div className="p-4 bg-black/50 rounded-full backdrop-blur-sm hover:bg-black/70">
+                {isPlaying ? <Pause className="w-10 h-10 text-white" /> : <Play className="w-10 h-10 text-white ml-1" />}
+              </div>
+            </button>
+
+            <div className="absolute inset-x-0 bottom-0 p-4 space-y-2">
+              <input
+                type="range" min={0} max={duration || 100} value={currentTime} onChange={seek}
+                className="w-full h-1 bg-white/30 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-red-500 [&::-webkit-slider-thumb]:rounded-full"
+              />
+              <div className="flex items-center justify-between text-white">
+                <div className="flex items-center gap-4">
+                  <button onClick={togglePlay}>{isPlaying ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6" />}</button>
+                  <button onClick={toggleMute}>{isMuted ? <VolumeX className="w-6 h-6" /> : <Volume2 className="w-6 h-6" />}</button>
+                  <span className="text-sm">{formatTime(currentTime)} / {formatTime(duration)}</span>
+                </div>
+                <button onClick={toggleFullscreen}><Maximize className="w-6 h-6" /></button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
 
       <div className="flex flex-wrap gap-3">
-        <button
-          onClick={copyUrl}
-          className="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg text-sm"
-        >
-          <Copy className="w-4 h-4" />
-          Copy URL
+        <button onClick={() => { navigator.clipboard.writeText(src); alert('Copied!'); }} className="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg text-sm">
+          <Copy className="w-4 h-4" /> Copy URL
         </button>
-        <button
-          onClick={openInVLC}
-          className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-sm"
-        >
-          <ExternalLink className="w-4 h-4" />
-          Open in VLC
+        <button onClick={() => window.location.href = `vlc://${src}`} className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-sm">
+          <ExternalLink className="w-4 h-4" /> Open in VLC
         </button>
       </div>
     </div>
