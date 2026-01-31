@@ -22,10 +22,10 @@ export interface HistoryItem {
   season?: number;
   episode?: number;
   episodeTitle?: string;
-  progress: number; // Current time in seconds
-  duration: number; // Total duration in seconds
-  lastWatchedAt: number; // Unix timestamp
-  watchedEpisodes?: Record<string, boolean>; // "s1e1" -> true format
+  progress: number;
+  duration: number;
+  lastWatchedAt: number;
+  watchedEpisodes?: Record<string, boolean>;
 }
 
 export interface WatchlistItem {
@@ -37,46 +37,85 @@ export interface WatchlistItem {
   addedAt: number;
 }
 
-// Addon Store
+// Default addons - all active by default
+const DEFAULT_ADDONS: Addon[] = [
+  {
+    id: 'webstreamr',
+    name: 'WebStreamr',
+    manifest: 'https://webstreamr.hayd.uk/manifest.json',
+    version: '1.0.0',
+    description: 'High-quality web streams',
+    types: ['movie', 'series'],
+  },
+  {
+    id: 'flixnest-webstreamr',
+    name: 'FlixNest WebStreamr',
+    manifest: 'https://flixnest.app/addon/webstreamr/manifest.json',
+    version: '1.0.0',
+    description: 'FlixNest streaming addon',
+    types: ['movie', 'series'],
+  },
+  {
+    id: 'nuviostreams',
+    name: 'NuvioStreams',
+    manifest: 'https://nuviostreams.hayd.uk/manifest.json',
+    version: '1.0.0',
+    description: 'Nuvio streaming service',
+    types: ['movie', 'series'],
+  },
+];
+
+// Addon Store - supports multiple active addons
 interface AddonState {
   addons: Addon[];
-  activeAddon: Addon | null;
+  activeAddons: Addon[];
   addAddon: (addon: Addon) => void;
   removeAddon: (id: string) => void;
-  setActiveAddon: (addon: Addon | null) => void;
+  toggleAddonActive: (id: string) => void;
+  isAddonActive: (id: string) => boolean;
   getAddonByManifest: (manifest: string) => Addon | undefined;
 }
-
-const DEFAULT_ADDON: Addon = {
-  id: 'webstreamr',
-  name: 'WebStreamr',
-  manifest: 'https://webstreamr.hayd.uk/manifest.json',
-  version: '1.0.0',
-  description: 'High-quality web streams',
-  types: ['movie', 'series'],
-};
 
 export const useAddonStore = create<AddonState>()(
   persist(
     (set, get) => ({
-      addons: [DEFAULT_ADDON],
-      activeAddon: DEFAULT_ADDON,
+      addons: DEFAULT_ADDONS,
+      activeAddons: DEFAULT_ADDONS,
 
       addAddon: (addon) =>
         set((state) => {
           const exists = state.addons.some((a) => a.manifest === addon.manifest);
           if (exists) return state;
-          return { addons: [...state.addons, addon] };
+          return {
+            addons: [...state.addons, addon],
+            activeAddons: [...state.activeAddons, addon],
+          };
         }),
 
       removeAddon: (id) =>
         set((state) => ({
           addons: state.addons.filter((a) => a.id !== id),
-          activeAddon:
-            state.activeAddon?.id === id ? state.addons[0] || null : state.activeAddon,
+          activeAddons: state.activeAddons.filter((a) => a.id !== id),
         })),
 
-      setActiveAddon: (addon) => set({ activeAddon: addon }),
+      toggleAddonActive: (id) =>
+        set((state) => {
+          const addon = state.addons.find((a) => a.id === id);
+          if (!addon) return state;
+
+          const isActive = state.activeAddons.some((a) => a.id === id);
+          if (isActive) {
+            return {
+              activeAddons: state.activeAddons.filter((a) => a.id !== id),
+            };
+          } else {
+            return {
+              activeAddons: [...state.activeAddons, addon],
+            };
+          }
+        }),
+
+      isAddonActive: (id) => get().activeAddons.some((a) => a.id === id),
 
       getAddonByManifest: (manifest) => get().addons.find((a) => a.manifest === manifest),
     }),
@@ -90,8 +129,6 @@ export const useAddonStore = create<AddonState>()(
 // History Store
 interface HistoryState {
   history: HistoryItem[];
-
-  // Actions
   updateProgress: (item: Omit<HistoryItem, 'lastWatchedAt'>) => void;
   markEpisodeWatched: (id: string, season: number, episode: number) => void;
   isEpisodeWatched: (id: string, season: number, episode: number) => boolean;
@@ -116,7 +153,6 @@ export const useHistoryStore = create<HistoryState>()(
             lastWatchedAt: Date.now(),
           };
 
-          // For TV shows, preserve watched episodes
           if (existingIndex >= 0 && item.type === 'tv') {
             newItem.watchedEpisodes = {
               ...state.history[existingIndex].watchedEpisodes,
@@ -127,7 +163,6 @@ export const useHistoryStore = create<HistoryState>()(
           if (existingIndex >= 0) {
             const updated = [...state.history];
             updated[existingIndex] = newItem;
-            // Sort by last watched
             updated.sort((a, b) => b.lastWatchedAt - a.lastWatchedAt);
             return { history: updated };
           }
@@ -184,19 +219,12 @@ export const useHistoryStore = create<HistoryState>()(
       clearHistory: () => set({ history: [] }),
 
       getNextEpisode: (id, currentSeason, currentEpisode, totalEpisodes, totalSeasons) => {
-        const item = get().history.find((h) => h.id === id);
-
-        // If current episode is not the last of the season
         if (currentEpisode < totalEpisodes) {
           return { season: currentSeason, episode: currentEpisode + 1 };
         }
-
-        // If there are more seasons
         if (currentSeason < totalSeasons) {
           return { season: currentSeason + 1, episode: 1 };
         }
-
-        // No more episodes
         return null;
       },
     }),
@@ -255,7 +283,7 @@ export const useWatchlistStore = create<WatchlistState>()(
   )
 );
 
-// UI Store (non-persisted)
+// UI Store
 interface UIState {
   isMobile: boolean;
   isPlayerFullscreen: boolean;

@@ -4,6 +4,7 @@ export interface Stream {
   name?: string;
   title?: string;
   url?: string;
+  externalUrl?: string;
   headers?: Record<string, string>;
   infoHash?: string;
   fileIdx?: number;
@@ -11,6 +12,11 @@ export interface Stream {
     notWebReady?: boolean;
     bingeGroup?: string;
     filename?: string;
+    videoSize?: number;
+    proxyHeaders?: {
+      request?: Record<string, string>;
+      response?: Record<string, string>;
+    };
   };
 }
 
@@ -73,9 +79,29 @@ function getQualityScore(stream: Stream): number {
   return 10; // Default low score for unknown quality
 }
 
+// Normalize stream: extract URL and headers from various formats
+function normalizeStream(stream: Stream): Stream {
+  // Use externalUrl if url is not present
+  const url = stream.url || stream.externalUrl;
+
+  // Extract headers from behaviorHints.proxyHeaders.request if not in headers directly
+  let headers = stream.headers;
+  if (!headers && stream.behaviorHints?.proxyHeaders?.request) {
+    headers = stream.behaviorHints.proxyHeaders.request;
+  }
+
+  return {
+    ...stream,
+    url,
+    headers,
+  };
+}
+
 // Filter and sort streams
 function processStreams(streams: Stream[]): Stream[] {
   return streams
+    // Normalize streams first (extract URL and headers from various locations)
+    .map(normalizeStream)
     // Filter out magnet links, keep only HTTPS
     .filter((stream) => {
       if (!stream.url) return false;
@@ -162,7 +188,7 @@ export async function getStreams(
   }
 }
 
-// Get subtitles from OpenSubtitles addon
+// Get subtitles from Subhero addon (default)
 export async function getSubtitles(
   imdbId: string,
   type: 'movie' | 'series' | 'tv',
@@ -171,13 +197,13 @@ export async function getSubtitles(
 ): Promise<Subtitle[]> {
   try {
     const stremioType = type === 'tv' || type === 'series' ? 'series' : 'movie';
-    const openSubsUrl = 'https://opensubtitles-v3.strem.io';
+    const subheroUrl = 'https://subhero.strem.io';
 
     let subtitleUrl: string;
     if (stremioType === 'series' && season !== undefined && episode !== undefined) {
-      subtitleUrl = `${openSubsUrl}/subtitles/${stremioType}/${imdbId}:${season}:${episode}.json`;
+      subtitleUrl = `${subheroUrl}/subtitles/${stremioType}/${imdbId}:${season}:${episode}.json`;
     } else {
-      subtitleUrl = `${openSubsUrl}/subtitles/${stremioType}/${imdbId}.json`;
+      subtitleUrl = `${subheroUrl}/subtitles/${stremioType}/${imdbId}.json`;
     }
 
     const response = await axios.get<{ subtitles: Subtitle[] }>(proxyUrl(subtitleUrl), {

@@ -11,6 +11,8 @@ import {
   Loader2,
   ExternalLink,
   Zap,
+  ToggleLeft,
+  ToggleRight,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -45,7 +47,7 @@ export default function AddonsPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const { addons, activeAddon, addAddon, removeAddon, setActiveAddon, getAddonByManifest } =
+  const { addons, activeAddons, addAddon, removeAddon, toggleAddonActive, isAddonActive, getAddonByManifest } =
     useAddonStore();
 
   const handleAddAddon = async (url?: string) => {
@@ -56,7 +58,6 @@ export default function AddonsPage() {
       return;
     }
 
-    // Validate URL format
     try {
       new URL(urlToAdd);
     } catch {
@@ -64,7 +65,6 @@ export default function AddonsPage() {
       return;
     }
 
-    // Check if already installed
     if (getAddonByManifest(urlToAdd)) {
       toast.info('Addon already installed');
       setManifestUrl('');
@@ -113,9 +113,10 @@ export default function AddonsPage() {
     toast.success(`${addon.name} removed`);
   };
 
-  const handleSetActive = (addon: Addon) => {
-    setActiveAddon(addon);
-    toast.success(`${addon.name} is now active`);
+  const handleToggleActive = (addon: Addon) => {
+    toggleAddonActive(addon.id);
+    const willBeActive = !isAddonActive(addon.id);
+    toast.success(willBeActive ? `${addon.name} enabled` : `${addon.name} disabled`);
   };
 
   return (
@@ -129,7 +130,7 @@ export default function AddonsPage() {
           <div>
             <h1 className="text-2xl md:text-3xl font-bold text-white">Addons</h1>
             <p className="text-zinc-400">
-              Manage your streaming sources
+              {activeAddons.length} active addon(s)
             </p>
           </div>
         </div>
@@ -165,7 +166,6 @@ export default function AddonsPage() {
             </button>
           </div>
 
-          {/* Error Message */}
           <AnimatePresence>
             {error && (
               <motion.div
@@ -235,7 +235,7 @@ export default function AddonsPage() {
           <div className="space-y-3">
             <AnimatePresence mode="popLayout">
               {addons.map((addon) => {
-                const isActive = activeAddon?.id === addon.id;
+                const isActive = isAddonActive(addon.id);
 
                 return (
                   <motion.div
@@ -246,7 +246,7 @@ export default function AddonsPage() {
                     exit={{ opacity: 0, x: -100 }}
                     className={`bg-zinc-900 rounded-xl p-4 border transition-colors ${
                       isActive
-                        ? 'border-red-500 ring-1 ring-red-500/20'
+                        ? 'border-green-500/50 bg-green-500/5'
                         : 'border-zinc-800 hover:border-zinc-700'
                     }`}
                   >
@@ -260,7 +260,7 @@ export default function AddonsPage() {
                             v{addon.version}
                           </span>
                           {isActive && (
-                            <span className="text-xs text-red-400 bg-red-500/20 px-2 py-0.5 rounded">
+                            <span className="text-xs text-green-400 bg-green-500/20 px-2 py-0.5 rounded">
                               Active
                             </span>
                           )}
@@ -285,15 +285,21 @@ export default function AddonsPage() {
                       </div>
 
                       <div className="flex items-center gap-2">
-                        {!isActive && (
-                          <button
-                            onClick={() => handleSetActive(addon)}
-                            className="p-2 text-zinc-400 hover:text-green-400 hover:bg-zinc-800 rounded-lg transition-colors"
-                            title="Set as active"
-                          >
-                            <Check className="w-5 h-5" />
-                          </button>
-                        )}
+                        <button
+                          onClick={() => handleToggleActive(addon)}
+                          className={`p-2 rounded-lg transition-colors ${
+                            isActive
+                              ? 'text-green-400 hover:bg-green-500/20'
+                              : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
+                          }`}
+                          title={isActive ? 'Disable addon' : 'Enable addon'}
+                        >
+                          {isActive ? (
+                            <ToggleRight className="w-6 h-6" />
+                          ) : (
+                            <ToggleLeft className="w-6 h-6" />
+                          )}
+                        </button>
 
                         <a
                           href={addon.manifest}
@@ -325,10 +331,10 @@ export default function AddonsPage() {
         <div className="mt-8 p-4 bg-zinc-900/50 border border-zinc-800 rounded-xl">
           <h3 className="font-semibold text-white mb-2">How Addons Work</h3>
           <ul className="text-sm text-zinc-400 space-y-1">
-            <li>• Addons provide streaming links for movies and TV shows</li>
-            <li>• The active addon is used to fetch streams when you watch content</li>
-            <li>• You can install multiple addons and switch between them</li>
-            <li>• Some addons may require additional setup (like Real-Debrid)</li>
+            <li>• Multiple addons can be active at the same time</li>
+            <li>• Active addons are searched in parallel for streams</li>
+            <li>• Toggle addons on/off to control which sources are used</li>
+            <li>• Some streams require VLC or external player</li>
           </ul>
         </div>
       </div>

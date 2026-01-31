@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -15,20 +15,23 @@ import {
   ChevronRight,
   AlertCircle,
   Loader2,
-  MonitorPlay,
+  Radio,
+  Copy,
+  ExternalLink,
+  Sparkles,
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import axios from 'axios';
 import { toast } from 'sonner';
 
-import { VideoPlayer } from '@/components/player/video-player';
 import { MediaCard } from '@/components/ui/media-card';
 import {
   useHistoryStore,
   useWatchlistStore,
   useAddonStore,
 } from '@/store';
-import { getStreams, getSubtitles, getExternalIds, parseStreamInfo, type Stream } from '@/lib/stremio';
+import { buildProxyUrl } from '@/lib/stream-utils';
+import { getStreams, getSubtitles, parseStreamInfo, type Stream } from '@/lib/stremio';
 
 const TMDB_API_KEY = 'ffe7ef8916c61835264d2df68276ddc2';
 const TMDB_BASE = 'https://api.themoviedb.org/3';
@@ -71,16 +74,16 @@ export default function WatchPage() {
   );
   const [availableStreams, setAvailableStreams] = useState<Stream[]>([]);
   const [selectedStream, setSelectedStream] = useState<Stream | null>(null);
-  const [streamUrl, setStreamUrl] = useState<string | null>(null);
   const [subtitles, setSubtitles] = useState<Array<{ src: string; label: string; srclang: string }>>([]);
   const [isLoadingStream, setIsLoadingStream] = useState(false);
   const [streamError, setStreamError] = useState<string | null>(null);
   const [isSeasonExpanded, setIsSeasonExpanded] = useState(true);
   const [isStreamListExpanded, setIsStreamListExpanded] = useState(false);
+  const [isPlayerListExpanded, setIsPlayerListExpanded] = useState(false);
 
-  const { activeAddon } = useAddonStore();
+  const { activeAddons } = useAddonStore();
   const { isInWatchlist, toggleWatchlist } = useWatchlistStore();
-  const { history, updateProgress, markEpisodeWatched, isEpisodeWatched, getEpisodeProgress } = useHistoryStore();
+  const { isEpisodeWatched, getEpisodeProgress } = useHistoryStore();
 
   // Fetch media details
   const { data: details, isLoading: detailsLoading } = useQuery({
@@ -116,40 +119,53 @@ export default function WatchPage() {
     },
   });
 
-  // Get IMDB ID
   const imdbId = details?.external_ids?.imdb_id || details?.imdb_id;
 
-  // Fetch streams when ready
+  // Fetch streams from ALL active addons
   useEffect(() => {
-    if (!imdbId || !activeAddon) return;
+    if (!imdbId || activeAddons.length === 0) return;
 
-    const fetchStreams = async () => {
+    const fetchAllStreams = async () => {
       setIsLoadingStream(true);
       setStreamError(null);
 
       try {
         const stremioType = type === 'tv' ? 'series' : 'movie';
-        const streams = await getStreams(
-          activeAddon.manifest,
-          stremioType,
-          imdbId,
-          type === 'tv' ? selectedSeason : undefined,
-          type === 'tv' ? selectedEpisode : undefined
+
+        // Fetch from all active addons in parallel
+        const streamPromises = activeAddons.map(addon =>
+          getStreams(
+            addon.manifest,
+            stremioType,
+            imdbId,
+            type === 'tv' ? selectedSeason : undefined,
+            type === 'tv' ? selectedEpisode : undefined
+          ).catch(() => [] as Stream[])
         );
 
-        if (streams.length > 0) {
-          setAvailableStreams(streams);
+        const results = await Promise.all(streamPromises);
+        const allStreams = results.flat();
+
+        // Remove duplicates by URL
+        const uniqueStreams = allStreams.filter((stream, index, self) =>
+          stream.url && self.findIndex(s => s.url === stream.url) === index
+        );
+
+        if (uniqueStreams.length > 0) {
+          setAvailableStreams(uniqueStreams);
+
           // Auto-select first stream
-          if (streams[0].url) {
-            setSelectedStream(streams[0]);
-            setStreamUrl(streams[0].url);
-            const info = parseStreamInfo(streams[0]);
-            toast.success(`Found ${streams.length} stream(s) - Playing ${info.quality}`);
+          const firstStream = uniqueStreams[0];
+          if (firstStream?.url) {
+            console.log('[Watch] Auto-selecting stream:', firstStream.name || firstStream.title);
+            setSelectedStream(firstStream);
+            const info = parseStreamInfo(firstStream);
+            toast.success(`Found ${uniqueStreams.length} stream(s) - Playing ${info.source}`);
           }
         } else {
           setAvailableStreams([]);
           setSelectedStream(null);
-          setStreamError('No compatible streams found. Try a different addon.');
+          setStreamError('No streams found. Try different addons.');
         }
 
         // Fetch subtitles
@@ -175,8 +191,8 @@ export default function WatchPage() {
       }
     };
 
-    fetchStreams();
-  }, [imdbId, activeAddon, type, selectedSeason, selectedEpisode]);
+    fetchAllStreams();
+  }, [imdbId, activeAddons, type, selectedSeason, selectedEpisode]);
 
   // Update URL when episode changes
   useEffect(() => {
@@ -186,12 +202,10 @@ export default function WatchPage() {
     }
   }, [selectedSeason, selectedEpisode, tmdbId, type, router]);
 
-  // Get current episode
   const currentEpisode = seasonDetails?.episodes?.find(
     (ep: Episode) => ep.episode_number === selectedEpisode
   );
 
-  // Check episode status
   const getEpisodeStatus = (season: number, episode: number) => {
     const watched = isEpisodeWatched(tmdbId, season, episode);
     const progress = getEpisodeProgress(tmdbId, season, episode);
@@ -203,74 +217,72 @@ export default function WatchPage() {
     return 'unwatched';
   };
 
-  // Find next episode
-  const nextEpisode = useMemo(() => {
-    if (type !== 'tv' || !seasonDetails?.episodes) return null;
-
-    const totalEpisodes = seasonDetails.episodes.length;
-    const totalSeasons = details?.number_of_seasons || 1;
-
-    if (selectedEpisode < totalEpisodes) {
-      return { season: selectedSeason, episode: selectedEpisode + 1 };
-    } else if (selectedSeason < totalSeasons) {
-      return { season: selectedSeason + 1, episode: 1 };
-    }
-    return null;
-  }, [selectedSeason, selectedEpisode, seasonDetails, details, type]);
-
-  // Handle progress update
-  const handleProgressUpdate = (currentTime: number, duration: number) => {
-    if (!details) return;
-
-    updateProgress({
-      id: tmdbId,
-      imdbId: imdbId,
-      type: type,
-      title: details.title || details.name,
-      poster: details.poster_path,
-      backdrop: details.backdrop_path,
-      season: type === 'tv' ? selectedSeason : undefined,
-      episode: type === 'tv' ? selectedEpisode : undefined,
-      episodeTitle: currentEpisode?.name,
-      progress: currentTime,
-      duration: duration,
-    });
-  };
-
-  // Handle episode end
-  const handleEnded = () => {
-    if (type === 'tv') {
-      markEpisodeWatched(tmdbId, selectedSeason, selectedEpisode);
-      toast.success('Episode marked as watched');
-
-      // Auto-play next episode
-      if (nextEpisode) {
-        toast.info(`Playing next episode: S${nextEpisode.season}:E${nextEpisode.episode}`);
-        setSelectedSeason(nextEpisode.season);
-        setSelectedEpisode(nextEpisode.episode);
-      }
-    } else {
-      toast.success('Movie marked as watched');
-    }
-  };
-
   const handleEpisodeClick = (season: number, episode: number) => {
     setSelectedSeason(season);
     setSelectedEpisode(episode);
-    setStreamUrl(null);
     setAvailableStreams([]);
     setSelectedStream(null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleStreamSelect = (stream: Stream) => {
-    if (stream.url) {
-      setSelectedStream(stream);
-      setStreamUrl(stream.url);
-      const info = parseStreamInfo(stream);
-      toast.success(`Switched to ${info.quality} - ${info.source}`);
-      setIsStreamListExpanded(false);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (!stream.url) return;
+
+    setSelectedStream(stream);
+    const info = parseStreamInfo(stream);
+    toast.success(`Stream kiválasztva: ${info.source} - ${info.quality}`);
+    setIsStreamListExpanded(false);
+    setIsPlayerListExpanded(true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const playbackUrl = selectedStream?.url ?? null;
+
+  const playerOptions = [
+    {
+      id: 'vlc',
+      name: 'VLC',
+      description: 'Android, iOS, Desktop',
+      getLink: (url: string) => `vlc://${encodeURIComponent(url)}`,
+    },
+    {
+      id: 'infuse',
+      name: 'Infuse',
+      description: 'iOS / iPadOS',
+      getLink: (url: string) =>
+        `infuse://x-callback-url/play?url=${encodeURIComponent(url)}`,
+    },
+    {
+      id: 'outplayer',
+      name: 'Outplayer',
+      description: 'iOS / iPadOS',
+      getLink: (url: string) =>
+        `outplayer://play?url=${encodeURIComponent(url)}`,
+    },
+    {
+      id: 'just-player',
+      name: 'Just Player',
+      description: 'Android',
+      getLink: (url: string) =>
+        `intent:${url}#Intent;package=com.brouken.player;type=video/*;end`,
+    },
+    {
+      id: 'mx-player',
+      name: 'MX Player',
+      description: 'Android',
+      getLink: (url: string) =>
+        `intent:${url}#Intent;package=com.mxtech.videoplayer.ad;type=video/*;end`,
+    },
+  ];
+
+  const handleCopyUrl = async () => {
+    if (!playbackUrl) return;
+    try {
+      await navigator.clipboard.writeText(playbackUrl);
+      toast.success('Stream link másolva');
+    } catch (error) {
+      console.error('Copy failed:', error);
+      toast.error('Nem sikerült másolni a linket');
     }
   };
 
@@ -307,44 +319,107 @@ export default function WatchPage() {
   return (
     <main className="min-h-screen bg-zinc-950 pt-16 pb-24">
       <div className="max-w-7xl mx-auto px-4 md:px-8">
-        {/* Video Player */}
+        {/* External Player */}
         <div className="mb-6">
-          {isLoadingStream ? (
-            <div className="aspect-video bg-zinc-900 rounded-xl flex items-center justify-center">
-              <div className="flex flex-col items-center gap-4">
-                <Loader2 className="w-12 h-12 text-red-500 animate-spin" />
-                <p className="text-zinc-400">Loading streams...</p>
+          <div className="relative overflow-hidden rounded-2xl border border-zinc-800 bg-gradient-to-br from-zinc-900 via-zinc-950 to-zinc-900 p-6">
+            <div className="flex flex-col lg:flex-row gap-6">
+              <div className="flex-1">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="p-2 bg-red-500/20 rounded-lg">
+                    <Sparkles className="w-5 h-5 text-red-400" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-semibold text-white">Külső lejátszóval indítás</h2>
+                    <p className="text-sm text-zinc-400">
+                      Nincs beépített lejátszó — válassz streamet, majd nyisd meg kedvenc appodban.
+                    </p>
+                  </div>
+                </div>
+
+                {isLoadingStream ? (
+                  <div className="flex items-center gap-3 text-zinc-300">
+                    <Loader2 className="w-5 h-5 animate-spin text-red-400" />
+                    <span>Stream keresés {activeAddons.length} aktív addonban...</span>
+                  </div>
+                ) : streamError ? (
+                  <div className="flex items-center gap-3 text-red-400">
+                    <AlertCircle className="w-5 h-5" />
+                    <span>{streamError}</span>
+                  </div>
+                ) : selectedStream && playbackUrl ? (
+                  <div className="space-y-4">
+                    <div className="rounded-xl border border-zinc-800 bg-zinc-900/70 p-4">
+                      <div className="flex items-center justify-between gap-4 flex-wrap">
+                        <div>
+                          <p className="text-xs uppercase tracking-wide text-zinc-500">Kiválasztott stream</p>
+                          <p className="text-lg font-semibold text-white">
+                            {parseStreamInfo(selectedStream).source}
+                          </p>
+                          <p className="text-sm text-zinc-400">
+                            {selectedStream.name || selectedStream.title || 'Stream'}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <button
+                            onClick={() => setIsPlayerListExpanded((prev) => !prev)}
+                            className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
+                          >
+                            <Play className="w-4 h-4" />
+                            Lejátszó választása
+                          </button>
+                          <button
+                            onClick={handleCopyUrl}
+                            className="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg transition-colors"
+                          >
+                            <Copy className="w-4 h-4" />
+                            Link másolása
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <AnimatePresence>
+                      {isPlayerListExpanded && (
+                        <motion.div
+                          initial={{ opacity: 0, y: -10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -10 }}
+                          className="grid grid-cols-1 md:grid-cols-2 gap-3"
+                        >
+                          {playerOptions.map((player) => (
+                            <a
+                              key={player.id}
+                              href={player.getLink(playbackUrl)}
+                              className="group flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 hover:border-red-500/60 hover:bg-zinc-900 transition-colors"
+                            >
+                              <div>
+                                <p className="text-white font-semibold">{player.name}</p>
+                                <p className="text-sm text-zinc-400">{player.description}</p>
+                              </div>
+                              <ExternalLink className="w-5 h-5 text-zinc-500 group-hover:text-red-400" />
+                            </a>
+                          ))}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                ) : (
+                  <p className="text-zinc-400">
+                    Válassz egy streamet a listából, hogy megjelenjenek a lejátszó opciók.
+                  </p>
+                )}
+              </div>
+
+              <div className="lg:w-80 rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
+                <h3 className="text-sm font-semibold text-white mb-3">Gyors tippek</h3>
+                <ul className="space-y-2 text-sm text-zinc-400">
+                  <li>• Torrentio esetén a debrid beállítása az addonon belül történik.</li>
+                  <li>• A scraper addonok csak listáznak — lejátszás mindig külső appban történik.</li>
+                  <li>• Alap feliratforrás: Subhero Stremio addon.</li>
+                </ul>
               </div>
             </div>
-          ) : streamError ? (
-            <div className="aspect-video bg-zinc-900 rounded-xl flex items-center justify-center">
-              <div className="flex flex-col items-center gap-4 text-center px-4">
-                <AlertCircle className="w-12 h-12 text-red-500" />
-                <p className="text-white font-semibold">{streamError}</p>
-                <p className="text-zinc-400 text-sm">
-                  Try adding more addons from the Addons page.
-                </p>
-              </div>
-            </div>
-          ) : streamUrl ? (
-            <VideoPlayer
-              src={streamUrl}
-              headers={selectedStream?.headers}
-              poster={`https://image.tmdb.org/t/p/w1280${details.backdrop_path}`}
-              title={
-                type === 'tv'
-                  ? `${details.name} - S${selectedSeason}:E${selectedEpisode}`
-                  : details.title
-              }
-              subtitles={subtitles}
-              onProgress={handleProgressUpdate}
-              onEnded={handleEnded}
-            />
-          ) : (
-            <div className="aspect-video bg-zinc-900 rounded-xl flex items-center justify-center">
-              <p className="text-zinc-400">Select a stream to play</p>
-            </div>
-          )}
+          </div>
         </div>
 
         {/* Stream Selector */}
@@ -352,24 +427,20 @@ export default function WatchPage() {
           <div className="mb-6">
             <button
               onClick={() => setIsStreamListExpanded(!isStreamListExpanded)}
-              className="flex items-center justify-between w-full px-4 py-3 bg-zinc-900 rounded-lg hover:bg-zinc-800 transition-colors"
+              className="flex items-center justify-between w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg hover:bg-zinc-700 transition-colors"
             >
               <div className="flex items-center gap-3">
-                <MonitorPlay className="w-5 h-5 text-red-500" />
+                <Radio className="w-5 h-5 text-red-500" />
                 <span className="text-white font-medium">
-                  Available Streams ({availableStreams.length})
+                  {availableStreams.length} Stream(s) Available
                 </span>
                 {selectedStream && (
-                  <span className="text-sm text-zinc-400">
-                    - {parseStreamInfo(selectedStream).quality} • {parseStreamInfo(selectedStream).source}
+                  <span className="text-zinc-400 text-sm">
+                    - Currently: {parseStreamInfo(selectedStream).source}
                   </span>
                 )}
               </div>
-              <ChevronDown
-                className={`w-5 h-5 text-zinc-400 transition-transform ${
-                  isStreamListExpanded ? 'rotate-180' : ''
-                }`}
-              />
+              <ChevronDown className={`w-5 h-5 text-zinc-400 transition-transform ${isStreamListExpanded ? 'rotate-180' : ''}`} />
             </button>
 
             <AnimatePresence>
@@ -383,7 +454,6 @@ export default function WatchPage() {
                   {availableStreams.map((stream, index) => {
                     const streamInfo = parseStreamInfo(stream);
                     const isSelected = selectedStream?.url === stream.url;
-                    const isM3u8 = stream.url?.includes('.m3u8') || stream.url?.includes('m3u8');
 
                     return (
                       <button
@@ -402,28 +472,21 @@ export default function WatchPage() {
                             <Play className="w-5 h-5 text-zinc-600" />
                           )}
                           <div className="text-left">
-                            <div className="font-medium flex items-center gap-2">
-                              {streamInfo.source}
-                              {isM3u8 && (
-                                <span className="px-2 py-0.5 bg-blue-600/20 text-blue-400 rounded text-xs">
-                                  HLS
-                                </span>
-                              )}
-                            </div>
-                            <div className="text-xs opacity-75 mt-0.5">
-                              {stream.name || stream.title || 'Unknown source'}
+                            <div className="font-medium">{streamInfo.source}</div>
+                            <div className="text-xs opacity-75">
+                              {stream.name || stream.title || 'Stream'}
                             </div>
                           </div>
                         </div>
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2">
+                          {streamInfo.size && (
+                            <span className="text-xs opacity-75">{streamInfo.size}</span>
+                          )}
                           <span className={`px-3 py-1 rounded-full text-sm font-medium ${
                             isSelected ? 'bg-white/20' : 'bg-zinc-800'
                           }`}>
                             {streamInfo.quality}
                           </span>
-                          {streamInfo.size && (
-                            <span className="text-sm opacity-75">{streamInfo.size}</span>
-                          )}
                         </div>
                       </button>
                     );
@@ -436,9 +499,7 @@ export default function WatchPage() {
 
         {/* Content Info */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Main Content */}
           <div className="lg:col-span-2">
-            {/* Title & Actions */}
             <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
               <div>
                 <h1 className="text-2xl md:text-3xl font-bold text-white">
@@ -454,26 +515,13 @@ export default function WatchPage() {
               <button
                 onClick={handleWatchlistToggle}
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
-                  inWatchlist
-                    ? 'bg-white text-black'
-                    : 'bg-zinc-800 text-white hover:bg-zinc-700'
+                  inWatchlist ? 'bg-white text-black' : 'bg-zinc-800 text-white hover:bg-zinc-700'
                 }`}
               >
-                {inWatchlist ? (
-                  <>
-                    <Check className="w-5 h-5" />
-                    In My List
-                  </>
-                ) : (
-                  <>
-                    <Plus className="w-5 h-5" />
-                    Add to List
-                  </>
-                )}
+                {inWatchlist ? <><Check className="w-5 h-5" /> In My List</> : <><Plus className="w-5 h-5" /> Add to List</>}
               </button>
             </div>
 
-            {/* Meta */}
             <div className="flex flex-wrap items-center gap-4 mb-6 text-sm text-zinc-400">
               <span className="flex items-center gap-1">
                 <Star className="w-4 h-4 text-yellow-500" />
@@ -489,27 +537,41 @@ export default function WatchPage() {
                   {Math.floor(details.runtime / 60)}h {details.runtime % 60}m
                 </span>
               )}
-              {details.number_of_seasons && (
-                <span>{details.number_of_seasons} Seasons</span>
-              )}
-              <span className="px-2 py-0.5 bg-zinc-800 rounded text-xs">
-                {type === 'tv' ? 'SERIES' : 'MOVIE'}
-              </span>
+              {details.number_of_seasons && <span>{details.number_of_seasons} Seasons</span>}
             </div>
 
-            {/* Overview */}
             <p className="text-zinc-300 leading-relaxed mb-8">
               {currentEpisode?.overview || details.overview}
             </p>
 
-            {/* Genres */}
+            {subtitles.length > 0 && (
+              <div className="mb-8">
+                <h2 className="text-lg font-semibold text-white mb-3">Feliratok (Subhero)</h2>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {subtitles.map((subtitle) => (
+                    <div
+                      key={subtitle.src}
+                      className="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2"
+                    >
+                      <span className="text-sm text-zinc-200">{subtitle.label}</span>
+                      <a
+                        href={buildProxyUrl(subtitle.src)}
+                        className="text-xs text-red-400 hover:text-red-300"
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Letöltés
+                      </a>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {details.genres && (
               <div className="flex flex-wrap gap-2 mb-8">
                 {details.genres.map((genre: any) => (
-                  <span
-                    key={genre.id}
-                    className="px-3 py-1 bg-zinc-800 rounded-full text-sm text-zinc-300"
-                  >
+                  <span key={genre.id} className="px-3 py-1 bg-zinc-800 rounded-full text-sm text-zinc-300">
                     {genre.name}
                   </span>
                 ))}
@@ -521,20 +583,13 @@ export default function WatchPage() {
               <div className="mb-8">
                 <h2 className="text-xl font-bold text-white mb-4">Episodes</h2>
 
-                {/* Season Selector */}
                 <div className="mb-4">
                   <button
                     onClick={() => setIsSeasonExpanded(!isSeasonExpanded)}
                     className="flex items-center gap-2 px-4 py-3 bg-zinc-800 rounded-lg w-full md:w-auto"
                   >
-                    <span className="text-white font-medium">
-                      Season {selectedSeason}
-                    </span>
-                    <ChevronDown
-                      className={`w-5 h-5 text-zinc-400 transition-transform ${
-                        isSeasonExpanded ? 'rotate-180' : ''
-                      }`}
-                    />
+                    <span className="text-white font-medium">Season {selectedSeason}</span>
+                    <ChevronDown className={`w-5 h-5 text-zinc-400 transition-transform ${isSeasonExpanded ? 'rotate-180' : ''}`} />
                   </button>
 
                   <AnimatePresence>
@@ -568,7 +623,6 @@ export default function WatchPage() {
                   </AnimatePresence>
                 </div>
 
-                {/* Episode Grid */}
                 <div className="space-y-3">
                   {seasonDetails?.episodes?.map((episode: Episode) => {
                     const status = getEpisodeStatus(selectedSeason, episode.episode_number);
@@ -580,15 +634,14 @@ export default function WatchPage() {
                         onClick={() => handleEpisodeClick(selectedSeason, episode.episode_number)}
                         className={`w-full flex gap-4 p-3 rounded-lg transition-all ${
                           status === 'current'
-                            ? 'episode-current bg-zinc-800'
+                            ? 'bg-zinc-800 ring-2 ring-red-500'
                             : status === 'watched'
-                            ? 'episode-watched bg-zinc-900 hover:bg-zinc-800'
+                            ? 'bg-zinc-900/50 hover:bg-zinc-800'
                             : 'bg-zinc-900 hover:bg-zinc-800'
                         }`}
                         whileHover={{ scale: 1.01 }}
                         whileTap={{ scale: 0.99 }}
                       >
-                        {/* Thumbnail */}
                         <div className="relative flex-none w-40 aspect-video rounded overflow-hidden bg-zinc-800">
                           {episode.still_path ? (
                             <Image
@@ -603,51 +656,36 @@ export default function WatchPage() {
                             </div>
                           )}
 
-                          {/* Progress bar overlay */}
                           {status === 'in-progress' && progress > 0 && (
                             <div className="absolute bottom-0 left-0 right-0 h-1 bg-zinc-700">
-                              <div
-                                className="h-full bg-red-600"
-                                style={{ width: `${progress}%` }}
-                              />
+                              <div className="h-full bg-red-600" style={{ width: `${progress}%` }} />
                             </div>
                           )}
 
-                          {/* Watched overlay */}
                           {status === 'watched' && (
                             <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                              <div className="p-2 bg-green-600 rounded-full">
-                                <Check className="w-5 h-5 text-white" />
-                              </div>
+                              <Check className="w-8 h-8 text-green-500" />
                             </div>
                           )}
 
-                          {/* Current badge */}
                           {status === 'current' && (
                             <div className="absolute top-2 left-2 px-2 py-1 bg-red-600 rounded text-xs font-bold text-white">
-                              NOW PLAYING
+                              NOW
                             </div>
                           )}
                         </div>
 
-                        {/* Episode Info */}
                         <div className="flex-1 text-left">
                           <div className="flex items-center gap-2">
-                            <span className="text-sm text-zinc-400">
-                              E{episode.episode_number}
-                            </span>
-                            <h4 className="text-white font-medium line-clamp-1">
-                              {episode.name}
-                            </h4>
+                            <span className="text-sm text-zinc-400">E{episode.episode_number}</span>
+                            <h4 className="text-white font-medium line-clamp-1">{episode.name}</h4>
                           </div>
                           <p className="text-sm text-zinc-400 line-clamp-2 mt-1">
                             {episode.overview || 'No description available.'}
                           </p>
                           <div className="flex items-center gap-3 mt-2 text-xs text-zinc-500">
                             {episode.runtime && <span>{episode.runtime}m</span>}
-                            {episode.air_date && (
-                              <span>{episode.air_date.split('-')[0]}</span>
-                            )}
+                            {episode.air_date && <span>{episode.air_date}</span>}
                           </div>
                         </div>
 
@@ -660,8 +698,59 @@ export default function WatchPage() {
             )}
           </div>
 
-          {/* Sidebar - Recommendations */}
           <div className="lg:col-span-1">
+            <div className="mb-8 rounded-2xl border border-zinc-800 bg-zinc-900/60 p-4">
+              <h2 className="text-lg font-semibold text-white mb-4">Ajánlott lejátszók</h2>
+              <div className="space-y-3">
+                {[
+                  {
+                    name: 'VLC',
+                    description: 'Legjobb univerzális választás, Android + iOS',
+                    ios: 'https://apps.apple.com/app/vlc-for-mobile/id650377962',
+                    android: 'https://play.google.com/store/apps/details?id=org.videolan.vlc',
+                  },
+                  {
+                    name: 'Infuse',
+                    description: 'iOS / iPadOS prémium élmény',
+                    ios: 'https://apps.apple.com/app/infuse-video-player/id1136220934',
+                  },
+                  {
+                    name: 'Just Player',
+                    description: 'Androidon könnyű, gyors lejátszó',
+                    android: 'https://play.google.com/store/apps/details?id=com.brouken.player',
+                  },
+                ].map((player) => (
+                  <div key={player.name} className="rounded-xl border border-zinc-800 bg-zinc-950/40 p-3">
+                    <p className="text-white font-medium">{player.name}</p>
+                    <p className="text-xs text-zinc-400 mb-2">{player.description}</p>
+                    <div className="flex flex-wrap gap-2 text-xs">
+                      {player.android && (
+                        <a
+                          href={player.android}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 rounded-full border border-zinc-700 px-3 py-1 text-zinc-300 hover:border-red-500/60 hover:text-white"
+                        >
+                          Google Play
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                      )}
+                      {player.ios && (
+                        <a
+                          href={player.ios}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 rounded-full border border-zinc-700 px-3 py-1 text-zinc-300 hover:border-red-500/60 hover:text-white"
+                        >
+                          App Store
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
             <h2 className="text-xl font-bold text-white mb-4">More Like This</h2>
             <div className="grid grid-cols-2 lg:grid-cols-1 gap-4">
               {recommendations?.slice(0, 6).map((item: any) => (
