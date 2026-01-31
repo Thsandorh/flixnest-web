@@ -17,23 +17,6 @@ interface VideoPlayerProps {
   onPause?: () => void;
 }
 
-// Build proxy URL for CORS bypass
-function buildProxyUrl(url: string, headers?: Record<string, string>): string {
-  const params = new URLSearchParams();
-  params.set('url', url);
-  if (headers && Object.keys(headers).length > 0) {
-    params.set('headers', JSON.stringify(headers));
-  }
-  return `/api/proxy?${params.toString()}`;
-}
-
-// Check if URL needs proxy
-function needsProxy(url: string): boolean {
-  if (url.startsWith('/api/')) return false;
-  if (url.startsWith('blob:')) return false;
-  return url.startsWith('http://') || url.startsWith('https://');
-}
-
 export function VideoPlayer({
   src,
   poster,
@@ -80,13 +63,13 @@ export function VideoPlayer({
     setIsLoading(true);
     setError(null);
 
-    // Use proxy for external URLs
-    const finalUrl = needsProxy(src) ? buildProxyUrl(src, headers) : src;
-    console.log('[Player] Original:', src.substring(0, 60));
-    console.log('[Player] Proxied:', finalUrl.substring(0, 80));
+    // Play directly without proxy
+    const finalUrl = src;
+    console.log('[Player] Playing:', src.substring(0, 80));
 
-    // All external streams should use HLS.js
-    const useHls = needsProxy(src) || src.includes('.m3u8');
+    // Try HLS.js for external streams (most vixsrc/vidsrc streams are HLS)
+    const isExternal = src.startsWith('http://') || src.startsWith('https://');
+    const useHls = isExternal || src.includes('.m3u8');
 
     if (useHls && Hls.isSupported()) {
       console.log('[Player] Using HLS.js');
