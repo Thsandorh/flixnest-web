@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef, useEffect, useState } from 'react';
+import Hls from 'hls.js';
 import { ExternalLink, Smartphone } from 'lucide-react';
 
 interface VideoPlayerProps {
@@ -27,7 +28,9 @@ export function VideoPlayer({
   onPause,
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const hlsRef = useRef<Hls | null>(null);
   const [isMobile, setIsMobile] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setIsMobile(/Android|iPhone|iPad|iPod/i.test(navigator.userAgent));
@@ -37,14 +40,64 @@ export function VideoPlayer({
     const video = videoRef.current;
     if (!video) return;
 
-    video.src = src;
-    video.load();
-
-    if (startTime > 0) {
-      video.currentTime = startTime;
+    // Cleanup previous
+    if (hlsRef.current) {
+      hlsRef.current.destroy();
+      hlsRef.current = null;
     }
+    setError(null);
+
+    const isHlsStream = src.includes('.m3u8') || src.includes('m3u8') ||
+                        src.includes('playlist') || src.includes('vixsrc') ||
+                        src.includes('vidsrc');
+
+    if (isHlsStream && Hls.isSupported()) {
+      // Use HLS.js for Chrome/Firefox
+      const hls = new Hls({
+        enableWorker: true,
+        lowLatencyMode: false,
+        backBufferLength: 90,
+      });
+      hlsRef.current = hls;
+
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        if (startTime > 0) video.currentTime = startTime;
+      });
+
+      hls.on(Hls.Events.ERROR, (_, data) => {
+        if (data.fatal) {
+          if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+            setError('Network error - stream may be unavailable');
+          } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+            hls.recoverMediaError();
+          } else {
+            setError('Playback error');
+          }
+        }
+      });
+
+      hls.loadSource(src);
+      hls.attachMedia(video);
+
+    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      // Safari native HLS
+      video.src = src;
+      if (startTime > 0) video.currentTime = startTime;
+    } else {
+      // Direct video (mp4, etc)
+      video.src = src;
+      if (startTime > 0) video.currentTime = startTime;
+    }
+
+    return () => {
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
+      }
+    };
   }, [src, startTime]);
 
+  // Progress tracking
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !onProgress) return;
@@ -61,34 +114,40 @@ export function VideoPlayer({
   return (
     <div className="relative w-full">
       <div className="w-full aspect-video bg-black rounded-xl overflow-hidden">
-        <video
-          ref={videoRef}
-          className="w-full h-full"
-          controls
-          playsInline
-          poster={poster}
-          onPlay={onPlay}
-          onPause={() => {
-            const v = videoRef.current;
-            if (v) onProgress?.(v.currentTime, v.duration || 0);
-            onPause?.();
-          }}
-          onEnded={() => {
-            const v = videoRef.current;
-            if (v) onProgress?.(v.duration || 0, v.duration || 0);
-            onEnded?.();
-          }}
-        >
-          {subtitles.map((track, i) => (
-            <track
-              key={i}
-              src={track.src}
-              kind="subtitles"
-              label={track.label}
-              srcLang={track.srclang}
-            />
-          ))}
-        </video>
+        {error ? (
+          <div className="w-full h-full flex items-center justify-center text-red-500">
+            <p>{error}</p>
+          </div>
+        ) : (
+          <video
+            ref={videoRef}
+            className="w-full h-full"
+            controls
+            playsInline
+            poster={poster}
+            onPlay={onPlay}
+            onPause={() => {
+              const v = videoRef.current;
+              if (v) onProgress?.(v.currentTime, v.duration || 0);
+              onPause?.();
+            }}
+            onEnded={() => {
+              const v = videoRef.current;
+              if (v) onProgress?.(v.duration || 0, v.duration || 0);
+              onEnded?.();
+            }}
+          >
+            {subtitles.map((track, i) => (
+              <track
+                key={i}
+                src={track.src}
+                kind="subtitles"
+                label={track.label}
+                srcLang={track.srclang}
+              />
+            ))}
+          </video>
+        )}
       </div>
 
       <div className="flex flex-wrap gap-3 mt-4">
@@ -115,12 +174,6 @@ export function VideoPlayer({
           className="flex-1 min-w-[120px] px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium text-sm"
         >
           Copy URL
-        </button>
-        <button
-          onClick={() => { window.open(src, '_blank'); }}
-          className="flex-1 min-w-[120px] px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium text-sm"
-        >
-          Open in Browser
         </button>
       </div>
     </div>
