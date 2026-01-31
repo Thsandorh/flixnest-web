@@ -1,20 +1,8 @@
 'use client';
 
-import { useCallback, useMemo, useRef, useState, useEffect } from 'react';
-import {
-  MediaPlayer,
-  MediaProvider,
-  type HLSSrc,
-  type MediaPlayerInstance,
-  type MediaTimeUpdateEvent,
-  type MediaTimeUpdateEventDetail,
-  type MediaDurationChangeEvent,
-  type PlayerSrc,
-} from '@vidstack/react';
-import { DefaultVideoLayout, defaultLayoutIcons } from '@vidstack/react/player/layouts/default';
-import { Copy, ExternalLink } from 'lucide-react';
-
-import { buildProxyUrl, buildVlcUrl, getVlcProxyHeaders, isHlsUrl } from '@/lib/stream-utils';
+import { useRef, useEffect, useState, useCallback } from 'react';
+import Hls from 'hls.js';
+import { Play, Pause, Volume2, VolumeX, Maximize, ExternalLink, Copy, AlertTriangle } from 'lucide-react';
 
 interface VideoPlayerProps {
   src: string;
@@ -49,7 +37,6 @@ function needsProxy(url: string): boolean {
 export function VideoPlayer({
   src,
   poster,
-  title,
   subtitles = [],
   headers,
   startTime = 0,
@@ -58,9 +45,19 @@ export function VideoPlayer({
   onPlay,
   onPause,
 }: VideoPlayerProps) {
-  const playerRef = useRef<MediaPlayerInstance | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const hlsRef = useRef<Hls | null>(null);
+
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const lastProgressRef = useRef(0);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [showControls, setShowControls] = useState(true);
+
+  const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const formatTime = (seconds: number) => {
     if (!seconds || !isFinite(seconds)) return '0:00';
@@ -88,11 +85,10 @@ export function VideoPlayer({
     console.log('[Player] Original:', src.substring(0, 60));
     console.log('[Player] Proxied:', finalUrl.substring(0, 80));
 
-    // Detect HLS - treat all external streams as HLS since we only show playable streams
-    const isHLS = src.includes('.m3u8') || src.includes('m3u8') ||
-                  src.includes('playlist') || needsProxy(src);
+    // All external streams should use HLS.js
+    const useHls = needsProxy(src) || src.includes('.m3u8');
 
-    if (isHLS && Hls.isSupported()) {
+    if (useHls && Hls.isSupported()) {
       console.log('[Player] Using HLS.js');
 
       const hls = new Hls({
@@ -109,11 +105,12 @@ export function VideoPlayer({
       hls.on(Hls.Events.MANIFEST_PARSED, (_, data) => {
         console.log('[Player] Manifest OK, levels:', data.levels.length);
         setIsLoading(false);
+        if (startTime > 0) video.currentTime = startTime;
         video.play().catch(() => {});
       });
 
       hls.on(Hls.Events.ERROR, (_, data) => {
-        console.error('[Player] HLS Error:', data.type, data.details, data);
+        console.error('[Player] HLS Error:', data.type, data.details);
 
         if (data.fatal) {
           if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
@@ -124,7 +121,7 @@ export function VideoPlayer({
             hls.recoverMediaError();
           } else {
             // Try direct video as fallback
-            console.log('[Player] HLS failed, trying direct video...');
+            console.log('[Player] HLS failed, trying direct...');
             hls.destroy();
             hlsRef.current = null;
             video.src = finalUrl;
@@ -140,7 +137,8 @@ export function VideoPlayer({
       hls.loadSource(finalUrl);
       hls.attachMedia(video);
 
-    } else if (isHLS && video.canPlayType('application/vnd.apple.mpegurl')) {
+    } else if (useHls && video.canPlayType('application/vnd.apple.mpegurl')) {
+      // Safari native HLS
       console.log('[Player] Safari native HLS');
       video.src = finalUrl;
       video.addEventListener('loadedmetadata', () => {
@@ -150,6 +148,7 @@ export function VideoPlayer({
       }, { once: true });
 
     } else {
+      // Direct video
       console.log('[Player] Direct video');
       video.src = finalUrl;
       video.addEventListener('loadedmetadata', () => {
@@ -202,6 +201,7 @@ export function VideoPlayer({
     };
   }, [onPlay, onPause, onEnded]);
 
+  // Progress reporting
   useEffect(() => {
     if (!onProgress || !duration) return;
     const interval = setInterval(() => {
@@ -240,7 +240,7 @@ export function VideoPlayer({
     if (container) {
       document.fullscreenElement ? document.exitFullscreen() : container.requestFullscreen();
     }
-  }, []);
+  };
 
   return (
     <div className="space-y-4">
