@@ -13,7 +13,15 @@ export const buildProxyUrl = (url: string, headers?: Record<string, string>) => 
     params.set('headers', JSON.stringify(headers));
   }
 
-  return `/api/proxy?${params.toString()}`;
+  // Use absolute URL for better compatibility with HLS.js, especially on mobile
+  const proxyPath = `/api/proxy?${params.toString()}`;
+
+  // In browser context, prepend origin; otherwise return relative path (SSR)
+  if (typeof window !== 'undefined') {
+    return `${window.location.origin}${proxyPath}`;
+  }
+
+  return proxyPath;
 };
 
 export const buildVlcUrl = (url: string) => {

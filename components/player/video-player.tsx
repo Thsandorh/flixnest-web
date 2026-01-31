@@ -69,7 +69,8 @@ export function VideoPlayer({
     const isExternal = src.startsWith('http://') || src.startsWith('https://');
     const proxyHeaders = getVlcProxyHeaders(src, headers);
     const finalUrl = isExternal ? buildProxyUrl(src, proxyHeaders) : src;
-    console.log('[Player] Playing:', finalUrl.substring(0, 80));
+    console.log('[Player] Original URL:', src.substring(0, 100));
+    console.log('[Player] Proxied URL:', finalUrl.substring(0, 150));
 
     // Try HLS.js for external streams (most vixsrc/vidsrc streams are HLS)
     const useHls = isExternal || src.includes('.m3u8');
