@@ -88,10 +88,9 @@ export function VideoPlayer({
     console.log('[Player] Original:', src.substring(0, 60));
     console.log('[Player] Proxied:', finalUrl.substring(0, 80));
 
-    // Detect HLS
+    // Detect HLS - treat all external streams as HLS since we only show playable streams
     const isHLS = src.includes('.m3u8') || src.includes('m3u8') ||
-                  src.includes('playlist') || src.includes('vixsrc') ||
-                  src.includes('vidsrc') || src.includes('vidscr');
+                  src.includes('playlist') || needsProxy(src);
 
     if (isHLS && Hls.isSupported()) {
       console.log('[Player] Using HLS.js');
@@ -118,13 +117,22 @@ export function VideoPlayer({
 
         if (data.fatal) {
           if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
-            console.log('[Player] Retrying...');
+            console.log('[Player] Network error, retrying...');
             setTimeout(() => hls.startLoad(), 2000);
           } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+            console.log('[Player] Media error, recovering...');
             hls.recoverMediaError();
           } else {
-            setError('Playback failed');
-            setIsLoading(false);
+            // Try direct video as fallback
+            console.log('[Player] HLS failed, trying direct video...');
+            hls.destroy();
+            hlsRef.current = null;
+            video.src = finalUrl;
+            video.load();
+            video.play().catch(() => {
+              setError('Playback failed - try VLC');
+              setIsLoading(false);
+            });
           }
         }
       });
