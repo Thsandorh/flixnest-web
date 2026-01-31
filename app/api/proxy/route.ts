@@ -17,6 +17,10 @@ export async function GET(request: NextRequest) {
 
   try {
     const decodedUrl = decodeURIComponent(url);
+    const isM3u8Url = /\.m3u8(\?.*)?$/i.test(decodedUrl) || decodedUrl.includes('.m3u8');
+    const defaultUserAgent = isM3u8Url
+      ? 'VLC/3.0.18 LibVLC/3.0.18'
+      : 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
     console.log('[Proxy] Fetching:', decodedUrl.substring(0, 100) + '...');
 
     // Validate URL
@@ -47,7 +51,7 @@ export async function GET(request: NextRequest) {
         customHeaders['User-Agent'] ||
         customHeaders['user-agent'] ||
         uaParam ||
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        defaultUserAgent,
       'Accept': request.headers.get('accept') || '*/*',
       'Accept-Language': 'en-US,en;q=0.9',
       'Referer':
@@ -114,7 +118,6 @@ export async function GET(request: NextRequest) {
     }
 
     // Check if URL looks like an M3U8 playlist (regardless of content-type)
-    const isM3u8Url = /\.m3u8(\?.*)?$/i.test(decodedUrl) || decodedUrl.includes('.m3u8');
     const isM3u8Content = contentType.includes('mpegurl') || contentType.includes('x-mpegurl');
 
     // Handle different content types
@@ -290,6 +293,10 @@ export async function HEAD(request: NextRequest) {
 
   try {
     const decodedUrl = decodeURIComponent(url);
+    const isM3u8Url = /\.m3u8(\?.*)?$/i.test(decodedUrl) || decodedUrl.includes('.m3u8');
+    const defaultUserAgent = isM3u8Url
+      ? 'VLC/3.0.18 LibVLC/3.0.18'
+      : 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
 
     // Parse custom headers from JSON parameter
     let customHeaders: Record<string, string> = {};
@@ -308,7 +315,7 @@ export async function HEAD(request: NextRequest) {
           customHeaders['User-Agent'] ||
           customHeaders['user-agent'] ||
           uaParam ||
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          defaultUserAgent,
         'Referer':
           customHeaders['Referer'] ||
           customHeaders['referer'] ||
