@@ -4,9 +4,11 @@ import { useCallback, useMemo, useRef, useState, useEffect } from 'react';
 import {
   MediaPlayer,
   MediaProvider,
+  type HLSSrc,
   type MediaPlayerInstance,
   type MediaTimeUpdateEvent,
   type MediaDurationChangeEvent,
+  type PlayerSrc,
 } from '@vidstack/react';
 import { DefaultVideoLayout, defaultLayoutIcons } from '@vidstack/react/player/layouts/default';
 import { Copy, ExternalLink } from 'lucide-react';
@@ -53,10 +55,16 @@ export function VideoPlayer({
     return src;
   }, [src, isHls, proxyHeaders]);
 
-  const mediaSrc = useMemo(
-    () => (isHls ? { src: resolvedSrc, type: 'application/x-mpegurl' } : resolvedSrc),
-    [isHls, resolvedSrc]
-  );
+  const mediaSrc = useMemo<PlayerSrc | undefined>(() => {
+    if (!resolvedSrc) return undefined;
+
+    if (isHls) {
+      const hlsSrc: HLSSrc = { src: resolvedSrc, type: 'application/x-mpegurl' };
+      return hlsSrc;
+    }
+
+    return resolvedSrc;
+  }, [isHls, resolvedSrc]);
 
   useEffect(() => {
     if (!playerRef.current || startTime <= 0) return;
