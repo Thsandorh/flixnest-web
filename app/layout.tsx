@@ -5,6 +5,9 @@ import { Toaster } from 'sonner';
 import { Navbar } from '@/components/navbar';
 import { MobileNav } from '@/components/mobile-nav';
 import { Providers } from './providers';
+import 'vidstack/player/styles/base.css';
+import 'vidstack/player/styles/default/theme.css';
+import 'vidstack/player/styles/default/layouts/video.css';
 import './globals.css';
 
 const inter = Inter({ subsets: ['latin'] });

@@ -31,6 +31,7 @@ import {
   useAddonStore,
 } from '@/store';
 import { getStreams, getSubtitles, parseStreamInfo, type Stream } from '@/lib/stremio';
+import { buildVlcUrl } from '@/lib/stream-utils';
 
 const TMDB_API_KEY = 'ffe7ef8916c61835264d2df68276ddc2';
 const TMDB_BASE = 'https://api.themoviedb.org/3';
@@ -300,7 +301,7 @@ export default function WatchPage() {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } else {
       // Open in VLC
-      window.location.href = `vlc://${stream.url}`;
+      window.location.href = buildVlcUrl(stream.url);
       toast.info('Opening in VLC...');
     }
   };

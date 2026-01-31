@@ -1,8 +1,20 @@
 'use client';
 
-import { useRef, useEffect, useState, useCallback } from 'react';
-import Hls from 'hls.js';
-import { Play, Pause, Volume2, VolumeX, Maximize, ExternalLink, Copy, AlertTriangle } from 'lucide-react';
+import { useCallback, useMemo, useRef, useState, useEffect } from 'react';
+import {
+  MediaPlayer,
+  MediaProvider,
+  type HLSSrc,
+  type MediaPlayerInstance,
+  type MediaTimeUpdateEvent,
+  type MediaTimeUpdateEventDetail,
+  type MediaDurationChangeEvent,
+  type PlayerSrc,
+} from '@vidstack/react';
+import { DefaultVideoLayout, defaultLayoutIcons } from '@vidstack/react/player/layouts/default';
+import { Copy, ExternalLink } from 'lucide-react';
+
+import { buildProxyUrl, buildVlcUrl, getVlcProxyHeaders, isHlsUrl } from '@/lib/stream-utils';
 
 interface VideoPlayerProps {
   src: string;
@@ -37,6 +49,7 @@ function needsProxy(url: string): boolean {
 export function VideoPlayer({
   src,
   poster,
+  title,
   subtitles = [],
   headers,
   startTime = 0,
@@ -45,19 +58,9 @@ export function VideoPlayer({
   onPlay,
   onPause,
 }: VideoPlayerProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const hlsRef = useRef<Hls | null>(null);
-
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
+  const playerRef = useRef<MediaPlayerInstance | null>(null);
   const [duration, setDuration] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [showControls, setShowControls] = useState(true);
-
-  const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastProgressRef = useRef(0);
 
   const formatTime = (seconds: number) => {
     if (!seconds || !isFinite(seconds)) return '0:00';
@@ -191,7 +194,6 @@ export function VideoPlayer({
     };
   }, [onPlay, onPause, onEnded]);
 
-  // Progress reporting
   useEffect(() => {
     if (!onProgress || !duration) return;
     const interval = setInterval(() => {
@@ -230,7 +232,7 @@ export function VideoPlayer({
     if (container) {
       document.fullscreenElement ? document.exitFullscreen() : container.requestFullscreen();
     }
-  };
+  }, []);
 
   return (
     <div className="space-y-4">
