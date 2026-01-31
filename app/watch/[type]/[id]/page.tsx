@@ -16,6 +16,8 @@ import {
   AlertCircle,
   Loader2,
   MonitorPlay,
+  ExternalLink,
+  Tv,
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import axios from 'axios';
@@ -28,10 +30,22 @@ import {
   useWatchlistStore,
   useAddonStore,
 } from '@/store';
-import { getStreams, getSubtitles, getExternalIds, parseStreamInfo, type Stream } from '@/lib/stremio';
+import { getStreams, getSubtitles, parseStreamInfo, type Stream } from '@/lib/stremio';
 
 const TMDB_API_KEY = 'ffe7ef8916c61835264d2df68276ddc2';
 const TMDB_BASE = 'https://api.themoviedb.org/3';
+
+// Sources that can be played in browser
+const BROWSER_PLAYABLE_SOURCES = ['vixsrc', 'vidsrc', 'vidscr'];
+
+function isPlayableInBrowser(stream: Stream): boolean {
+  const url = stream.url?.toLowerCase() || '';
+  const name = (stream.name || stream.title || '').toLowerCase();
+
+  return BROWSER_PLAYABLE_SOURCES.some(source =>
+    url.includes(source) || name.includes(source)
+  );
+}
 
 interface Episode {
   id: number;
@@ -78,9 +92,9 @@ export default function WatchPage() {
   const [isSeasonExpanded, setIsSeasonExpanded] = useState(true);
   const [isStreamListExpanded, setIsStreamListExpanded] = useState(false);
 
-  const { activeAddon } = useAddonStore();
+  const { activeAddons } = useAddonStore();
   const { isInWatchlist, toggleWatchlist } = useWatchlistStore();
-  const { history, updateProgress, markEpisodeWatched, isEpisodeWatched, getEpisodeProgress } = useHistoryStore();
+  const { updateProgress, markEpisodeWatched, isEpisodeWatched, getEpisodeProgress } = useHistoryStore();
 
   // Fetch media details
   const { data: details, isLoading: detailsLoading } = useQuery({
@@ -116,40 +130,57 @@ export default function WatchPage() {
     },
   });
 
-  // Get IMDB ID
   const imdbId = details?.external_ids?.imdb_id || details?.imdb_id;
 
-  // Fetch streams when ready
+  // Fetch streams from ALL active addons
   useEffect(() => {
-    if (!imdbId || !activeAddon) return;
+    if (!imdbId || activeAddons.length === 0) return;
 
-    const fetchStreams = async () => {
+    const fetchAllStreams = async () => {
       setIsLoadingStream(true);
       setStreamError(null);
 
       try {
         const stremioType = type === 'tv' ? 'series' : 'movie';
-        const streams = await getStreams(
-          activeAddon.manifest,
-          stremioType,
-          imdbId,
-          type === 'tv' ? selectedSeason : undefined,
-          type === 'tv' ? selectedEpisode : undefined
+
+        // Fetch from all active addons in parallel
+        const streamPromises = activeAddons.map(addon =>
+          getStreams(
+            addon.manifest,
+            stremioType,
+            imdbId,
+            type === 'tv' ? selectedSeason : undefined,
+            type === 'tv' ? selectedEpisode : undefined
+          ).catch(() => [] as Stream[])
         );
 
-        if (streams.length > 0) {
-          setAvailableStreams(streams);
-          // Auto-select first stream
-          if (streams[0].url) {
-            setSelectedStream(streams[0]);
-            setStreamUrl(streams[0].url);
-            const info = parseStreamInfo(streams[0]);
-            toast.success(`Found ${streams.length} stream(s) - Playing ${info.quality}`);
+        const results = await Promise.all(streamPromises);
+        const allStreams = results.flat();
+
+        // Remove duplicates by URL
+        const uniqueStreams = allStreams.filter((stream, index, self) =>
+          stream.url && self.findIndex(s => s.url === stream.url) === index
+        );
+
+        if (uniqueStreams.length > 0) {
+          setAvailableStreams(uniqueStreams);
+
+          // Auto-select first browser-playable stream
+          const playableStream = uniqueStreams.find(isPlayableInBrowser);
+          if (playableStream?.url) {
+            setSelectedStream(playableStream);
+            setStreamUrl(playableStream.url);
+            const info = parseStreamInfo(playableStream);
+            toast.success(`Found ${uniqueStreams.length} stream(s) - Playing ${info.source}`);
+          } else {
+            setSelectedStream(null);
+            setStreamUrl(null);
+            toast.info(`Found ${uniqueStreams.length} stream(s) - Use VLC to play`);
           }
         } else {
           setAvailableStreams([]);
           setSelectedStream(null);
-          setStreamError('No compatible streams found. Try a different addon.');
+          setStreamError('No streams found. Try different addons.');
         }
 
         // Fetch subtitles
@@ -175,8 +206,8 @@ export default function WatchPage() {
       }
     };
 
-    fetchStreams();
-  }, [imdbId, activeAddon, type, selectedSeason, selectedEpisode]);
+    fetchAllStreams();
+  }, [imdbId, activeAddons, type, selectedSeason, selectedEpisode]);
 
   // Update URL when episode changes
   useEffect(() => {
@@ -186,12 +217,10 @@ export default function WatchPage() {
     }
   }, [selectedSeason, selectedEpisode, tmdbId, type, router]);
 
-  // Get current episode
   const currentEpisode = seasonDetails?.episodes?.find(
     (ep: Episode) => ep.episode_number === selectedEpisode
   );
 
-  // Check episode status
   const getEpisodeStatus = (season: number, episode: number) => {
     const watched = isEpisodeWatched(tmdbId, season, episode);
     const progress = getEpisodeProgress(tmdbId, season, episode);
@@ -203,7 +232,6 @@ export default function WatchPage() {
     return 'unwatched';
   };
 
-  // Find next episode
   const nextEpisode = useMemo(() => {
     if (type !== 'tv' || !seasonDetails?.episodes) return null;
 
@@ -218,7 +246,6 @@ export default function WatchPage() {
     return null;
   }, [selectedSeason, selectedEpisode, seasonDetails, details, type]);
 
-  // Handle progress update
   const handleProgressUpdate = (currentTime: number, duration: number) => {
     if (!details) return;
 
@@ -237,13 +264,11 @@ export default function WatchPage() {
     });
   };
 
-  // Handle episode end
   const handleEnded = () => {
     if (type === 'tv') {
       markEpisodeWatched(tmdbId, selectedSeason, selectedEpisode);
       toast.success('Episode marked as watched');
 
-      // Auto-play next episode
       if (nextEpisode) {
         toast.info(`Playing next episode: S${nextEpisode.season}:E${nextEpisode.episode}`);
         setSelectedSeason(nextEpisode.season);
@@ -264,13 +289,19 @@ export default function WatchPage() {
   };
 
   const handleStreamSelect = (stream: Stream) => {
-    if (stream.url) {
+    if (!stream.url) return;
+
+    if (isPlayableInBrowser(stream)) {
       setSelectedStream(stream);
       setStreamUrl(stream.url);
       const info = parseStreamInfo(stream);
-      toast.success(`Switched to ${info.quality} - ${info.source}`);
+      toast.success(`Playing ${info.source}`);
       setIsStreamListExpanded(false);
       window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+      // Open in VLC
+      window.location.href = `vlc://${stream.url}`;
+      toast.info('Opening in VLC...');
     }
   };
 
@@ -287,6 +318,10 @@ export default function WatchPage() {
     });
     toast.success(inWatchlist ? 'Removed from list' : 'Added to list');
   };
+
+  // Separate streams into playable and VLC-only
+  const playableStreams = availableStreams.filter(isPlayableInBrowser);
+  const vlcOnlyStreams = availableStreams.filter(s => !isPlayableInBrowser(s));
 
   if (detailsLoading) {
     return (
@@ -313,7 +348,7 @@ export default function WatchPage() {
             <div className="aspect-video bg-zinc-900 rounded-xl flex items-center justify-center">
               <div className="flex flex-col items-center gap-4">
                 <Loader2 className="w-12 h-12 text-red-500 animate-spin" />
-                <p className="text-zinc-400">Loading streams...</p>
+                <p className="text-zinc-400">Searching {activeAddons.length} addon(s)...</p>
               </div>
             </div>
           ) : streamError ? (
@@ -321,9 +356,6 @@ export default function WatchPage() {
               <div className="flex flex-col items-center gap-4 text-center px-4">
                 <AlertCircle className="w-12 h-12 text-red-500" />
                 <p className="text-white font-semibold">{streamError}</p>
-                <p className="text-zinc-400 text-sm">
-                  Try adding more addons from the Addons page.
-                </p>
               </div>
             </div>
           ) : streamUrl ? (
@@ -340,105 +372,132 @@ export default function WatchPage() {
               onProgress={handleProgressUpdate}
               onEnded={handleEnded}
             />
+          ) : availableStreams.length > 0 ? (
+            <div className="aspect-video bg-gradient-to-br from-zinc-900 to-zinc-800 rounded-xl flex items-center justify-center">
+              <div className="flex flex-col items-center gap-6 text-center px-8">
+                <div className="p-4 bg-orange-500/20 rounded-full">
+                  <Tv className="w-12 h-12 text-orange-500" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-white mb-2">VLC Player Required</h3>
+                  <p className="text-zinc-400 max-w-md">
+                    Found {availableStreams.length} stream(s), but they require VLC or external player.
+                    Select a stream below to open in VLC.
+                  </p>
+                </div>
+              </div>
+            </div>
           ) : (
             <div className="aspect-video bg-zinc-900 rounded-xl flex items-center justify-center">
-              <p className="text-zinc-400">Select a stream to play</p>
+              <p className="text-zinc-400">No streams available</p>
             </div>
           )}
         </div>
 
         {/* Stream Selector */}
         {availableStreams.length > 0 && (
-          <div className="mb-6">
-            <button
-              onClick={() => setIsStreamListExpanded(!isStreamListExpanded)}
-              className="flex items-center justify-between w-full px-4 py-3 bg-zinc-900 rounded-lg hover:bg-zinc-800 transition-colors"
-            >
-              <div className="flex items-center gap-3">
-                <MonitorPlay className="w-5 h-5 text-red-500" />
-                <span className="text-white font-medium">
-                  Available Streams ({availableStreams.length})
-                </span>
-                {selectedStream && (
-                  <span className="text-sm text-zinc-400">
-                    - {parseStreamInfo(selectedStream).quality} • {parseStreamInfo(selectedStream).source}
-                  </span>
-                )}
-              </div>
-              <ChevronDown
-                className={`w-5 h-5 text-zinc-400 transition-transform ${
-                  isStreamListExpanded ? 'rotate-180' : ''
-                }`}
-              />
-            </button>
-
-            <AnimatePresence>
-              {isStreamListExpanded && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="mt-2 space-y-2"
+          <div className="mb-6 space-y-4">
+            {/* Browser Playable Streams */}
+            {playableStreams.length > 0 && (
+              <div>
+                <button
+                  onClick={() => setIsStreamListExpanded(!isStreamListExpanded)}
+                  className="flex items-center justify-between w-full px-4 py-3 bg-green-900/30 border border-green-800 rounded-lg hover:bg-green-900/50 transition-colors"
                 >
-                  {availableStreams.map((stream, index) => {
+                  <div className="flex items-center gap-3">
+                    <Play className="w-5 h-5 text-green-500" />
+                    <span className="text-white font-medium">
+                      Browser Playable ({playableStreams.length})
+                    </span>
+                  </div>
+                  <ChevronDown className={`w-5 h-5 text-zinc-400 transition-transform ${isStreamListExpanded ? 'rotate-180' : ''}`} />
+                </button>
+
+                <AnimatePresence>
+                  {isStreamListExpanded && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="mt-2 space-y-2"
+                    >
+                      {playableStreams.map((stream, index) => {
+                        const streamInfo = parseStreamInfo(stream);
+                        const isSelected = selectedStream?.url === stream.url;
+
+                        return (
+                          <button
+                            key={index}
+                            onClick={() => handleStreamSelect(stream)}
+                            className={`w-full flex items-center justify-between p-4 rounded-lg transition-all ${
+                              isSelected
+                                ? 'bg-green-600 text-white'
+                                : 'bg-zinc-900 text-zinc-300 hover:bg-zinc-800'
+                            }`}
+                          >
+                            <div className="flex items-center gap-3">
+                              {isSelected ? <Check className="w-5 h-5" /> : <Play className="w-5 h-5 text-zinc-600" />}
+                              <div className="text-left">
+                                <div className="font-medium">{streamInfo.source}</div>
+                                <div className="text-xs opacity-75">{stream.name || 'Stream'}</div>
+                              </div>
+                            </div>
+                            <span className={`px-3 py-1 rounded-full text-sm font-medium ${isSelected ? 'bg-white/20' : 'bg-zinc-800'}`}>
+                              {streamInfo.quality}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            )}
+
+            {/* VLC Only Streams */}
+            {vlcOnlyStreams.length > 0 && (
+              <div>
+                <div className="flex items-center justify-between w-full px-4 py-3 bg-orange-900/30 border border-orange-800 rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <ExternalLink className="w-5 h-5 text-orange-500" />
+                    <span className="text-white font-medium">
+                      VLC / External Player ({vlcOnlyStreams.length})
+                    </span>
+                  </div>
+                </div>
+
+                <div className="mt-2 space-y-2">
+                  {vlcOnlyStreams.map((stream, index) => {
                     const streamInfo = parseStreamInfo(stream);
-                    const isSelected = selectedStream?.url === stream.url;
-                    const isM3u8 = stream.url?.includes('.m3u8') || stream.url?.includes('m3u8');
 
                     return (
                       <button
                         key={index}
                         onClick={() => handleStreamSelect(stream)}
-                        className={`w-full flex items-center justify-between p-4 rounded-lg transition-all ${
-                          isSelected
-                            ? 'bg-red-600 text-white'
-                            : 'bg-zinc-900 text-zinc-300 hover:bg-zinc-800'
-                        }`}
+                        className="w-full flex items-center justify-between p-4 rounded-lg bg-zinc-900 text-zinc-300 hover:bg-zinc-800 transition-all"
                       >
                         <div className="flex items-center gap-3">
-                          {isSelected ? (
-                            <Check className="w-5 h-5" />
-                          ) : (
-                            <Play className="w-5 h-5 text-zinc-600" />
-                          )}
+                          <ExternalLink className="w-5 h-5 text-orange-500" />
                           <div className="text-left">
-                            <div className="font-medium flex items-center gap-2">
-                              {streamInfo.source}
-                              {isM3u8 && (
-                                <span className="px-2 py-0.5 bg-blue-600/20 text-blue-400 rounded text-xs">
-                                  HLS
-                                </span>
-                              )}
-                            </div>
-                            <div className="text-xs opacity-75 mt-0.5">
-                              {stream.name || stream.title || 'Unknown source'}
-                            </div>
+                            <div className="font-medium">{streamInfo.source}</div>
+                            <div className="text-xs text-orange-400">Opens in VLC</div>
                           </div>
                         </div>
-                        <div className="flex items-center gap-3">
-                          <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                            isSelected ? 'bg-white/20' : 'bg-zinc-800'
-                          }`}>
-                            {streamInfo.quality}
-                          </span>
-                          {streamInfo.size && (
-                            <span className="text-sm opacity-75">{streamInfo.size}</span>
-                          )}
-                        </div>
+                        <span className="px-3 py-1 rounded-full text-sm font-medium bg-zinc-800">
+                          {streamInfo.quality}
+                        </span>
                       </button>
                     );
                   })}
-                </motion.div>
-              )}
-            </AnimatePresence>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
         {/* Content Info */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Main Content */}
           <div className="lg:col-span-2">
-            {/* Title & Actions */}
             <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
               <div>
                 <h1 className="text-2xl md:text-3xl font-bold text-white">
@@ -454,26 +513,13 @@ export default function WatchPage() {
               <button
                 onClick={handleWatchlistToggle}
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
-                  inWatchlist
-                    ? 'bg-white text-black'
-                    : 'bg-zinc-800 text-white hover:bg-zinc-700'
+                  inWatchlist ? 'bg-white text-black' : 'bg-zinc-800 text-white hover:bg-zinc-700'
                 }`}
               >
-                {inWatchlist ? (
-                  <>
-                    <Check className="w-5 h-5" />
-                    In My List
-                  </>
-                ) : (
-                  <>
-                    <Plus className="w-5 h-5" />
-                    Add to List
-                  </>
-                )}
+                {inWatchlist ? <><Check className="w-5 h-5" /> In My List</> : <><Plus className="w-5 h-5" /> Add to List</>}
               </button>
             </div>
 
-            {/* Meta */}
             <div className="flex flex-wrap items-center gap-4 mb-6 text-sm text-zinc-400">
               <span className="flex items-center gap-1">
                 <Star className="w-4 h-4 text-yellow-500" />
@@ -489,27 +535,17 @@ export default function WatchPage() {
                   {Math.floor(details.runtime / 60)}h {details.runtime % 60}m
                 </span>
               )}
-              {details.number_of_seasons && (
-                <span>{details.number_of_seasons} Seasons</span>
-              )}
-              <span className="px-2 py-0.5 bg-zinc-800 rounded text-xs">
-                {type === 'tv' ? 'SERIES' : 'MOVIE'}
-              </span>
+              {details.number_of_seasons && <span>{details.number_of_seasons} Seasons</span>}
             </div>
 
-            {/* Overview */}
             <p className="text-zinc-300 leading-relaxed mb-8">
               {currentEpisode?.overview || details.overview}
             </p>
 
-            {/* Genres */}
             {details.genres && (
               <div className="flex flex-wrap gap-2 mb-8">
                 {details.genres.map((genre: any) => (
-                  <span
-                    key={genre.id}
-                    className="px-3 py-1 bg-zinc-800 rounded-full text-sm text-zinc-300"
-                  >
+                  <span key={genre.id} className="px-3 py-1 bg-zinc-800 rounded-full text-sm text-zinc-300">
                     {genre.name}
                   </span>
                 ))}
@@ -521,20 +557,13 @@ export default function WatchPage() {
               <div className="mb-8">
                 <h2 className="text-xl font-bold text-white mb-4">Episodes</h2>
 
-                {/* Season Selector */}
                 <div className="mb-4">
                   <button
                     onClick={() => setIsSeasonExpanded(!isSeasonExpanded)}
                     className="flex items-center gap-2 px-4 py-3 bg-zinc-800 rounded-lg w-full md:w-auto"
                   >
-                    <span className="text-white font-medium">
-                      Season {selectedSeason}
-                    </span>
-                    <ChevronDown
-                      className={`w-5 h-5 text-zinc-400 transition-transform ${
-                        isSeasonExpanded ? 'rotate-180' : ''
-                      }`}
-                    />
+                    <span className="text-white font-medium">Season {selectedSeason}</span>
+                    <ChevronDown className={`w-5 h-5 text-zinc-400 transition-transform ${isSeasonExpanded ? 'rotate-180' : ''}`} />
                   </button>
 
                   <AnimatePresence>
@@ -568,7 +597,6 @@ export default function WatchPage() {
                   </AnimatePresence>
                 </div>
 
-                {/* Episode Grid */}
                 <div className="space-y-3">
                   {seasonDetails?.episodes?.map((episode: Episode) => {
                     const status = getEpisodeStatus(selectedSeason, episode.episode_number);
@@ -580,15 +608,14 @@ export default function WatchPage() {
                         onClick={() => handleEpisodeClick(selectedSeason, episode.episode_number)}
                         className={`w-full flex gap-4 p-3 rounded-lg transition-all ${
                           status === 'current'
-                            ? 'episode-current bg-zinc-800'
+                            ? 'bg-zinc-800 ring-2 ring-red-500'
                             : status === 'watched'
-                            ? 'episode-watched bg-zinc-900 hover:bg-zinc-800'
+                            ? 'bg-zinc-900/50 hover:bg-zinc-800'
                             : 'bg-zinc-900 hover:bg-zinc-800'
                         }`}
                         whileHover={{ scale: 1.01 }}
                         whileTap={{ scale: 0.99 }}
                       >
-                        {/* Thumbnail */}
                         <div className="relative flex-none w-40 aspect-video rounded overflow-hidden bg-zinc-800">
                           {episode.still_path ? (
                             <Image
@@ -603,51 +630,36 @@ export default function WatchPage() {
                             </div>
                           )}
 
-                          {/* Progress bar overlay */}
                           {status === 'in-progress' && progress > 0 && (
                             <div className="absolute bottom-0 left-0 right-0 h-1 bg-zinc-700">
-                              <div
-                                className="h-full bg-red-600"
-                                style={{ width: `${progress}%` }}
-                              />
+                              <div className="h-full bg-red-600" style={{ width: `${progress}%` }} />
                             </div>
                           )}
 
-                          {/* Watched overlay */}
                           {status === 'watched' && (
                             <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                              <div className="p-2 bg-green-600 rounded-full">
-                                <Check className="w-5 h-5 text-white" />
-                              </div>
+                              <Check className="w-8 h-8 text-green-500" />
                             </div>
                           )}
 
-                          {/* Current badge */}
                           {status === 'current' && (
                             <div className="absolute top-2 left-2 px-2 py-1 bg-red-600 rounded text-xs font-bold text-white">
-                              NOW PLAYING
+                              NOW
                             </div>
                           )}
                         </div>
 
-                        {/* Episode Info */}
                         <div className="flex-1 text-left">
                           <div className="flex items-center gap-2">
-                            <span className="text-sm text-zinc-400">
-                              E{episode.episode_number}
-                            </span>
-                            <h4 className="text-white font-medium line-clamp-1">
-                              {episode.name}
-                            </h4>
+                            <span className="text-sm text-zinc-400">E{episode.episode_number}</span>
+                            <h4 className="text-white font-medium line-clamp-1">{episode.name}</h4>
                           </div>
                           <p className="text-sm text-zinc-400 line-clamp-2 mt-1">
                             {episode.overview || 'No description available.'}
                           </p>
                           <div className="flex items-center gap-3 mt-2 text-xs text-zinc-500">
                             {episode.runtime && <span>{episode.runtime}m</span>}
-                            {episode.air_date && (
-                              <span>{episode.air_date.split('-')[0]}</span>
-                            )}
+                            {episode.air_date && <span>{episode.air_date}</span>}
                           </div>
                         </div>
 
@@ -660,7 +672,6 @@ export default function WatchPage() {
             )}
           </div>
 
-          {/* Sidebar - Recommendations */}
           <div className="lg:col-span-1">
             <h2 className="text-xl font-bold text-white mb-4">More Like This</h2>
             <div className="grid grid-cols-2 lg:grid-cols-1 gap-4">
