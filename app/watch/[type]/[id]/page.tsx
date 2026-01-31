@@ -23,7 +23,7 @@ import { useQuery } from '@tanstack/react-query';
 import axios from 'axios';
 import { toast } from 'sonner';
 
-import { VideoPlayer } from '@/components/player/video-player';
+import { SimpleVideoPlayer } from '@/components/player/simple-video-player';
 import { MediaCard } from '@/components/ui/media-card';
 import {
   useHistoryStore,
@@ -360,16 +360,14 @@ export default function WatchPage() {
               </div>
             </div>
           ) : streamUrl ? (
-            <VideoPlayer
+            <SimpleVideoPlayer
               src={streamUrl}
-              headers={selectedStream?.headers}
               poster={`https://image.tmdb.org/t/p/w1280${details.backdrop_path}`}
               title={
                 type === 'tv'
                   ? `${details.name} - S${selectedSeason}:E${selectedEpisode}`
                   : details.title
               }
-              subtitles={subtitles}
               onProgress={handleProgressUpdate}
               onEnded={handleEnded}
             />
