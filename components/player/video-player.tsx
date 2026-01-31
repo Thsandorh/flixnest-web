@@ -42,6 +42,7 @@ export function VideoPlayer({
   const [showControls, setShowControls] = useState(true);
 
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const fatalErrorCountRef = useRef(0);
 
   const formatTime = (seconds: number) => {
     if (!seconds || !isFinite(seconds)) return '0:00';
@@ -63,6 +64,7 @@ export function VideoPlayer({
 
     setIsLoading(true);
     setError(null);
+    fatalErrorCountRef.current = 0;
 
     const isExternal = src.startsWith('http://') || src.startsWith('https://');
     const proxyHeaders = getVlcProxyHeaders(src, headers);
@@ -99,6 +101,17 @@ export function VideoPlayer({
         if (data.fatal) {
           if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
             console.log('[Player] Network error, retrying...');
+            fatalErrorCountRef.current += 1;
+
+            if (fatalErrorCountRef.current > 2) {
+              console.log('[Player] Too many network errors, giving up.');
+              hls.destroy();
+              hlsRef.current = null;
+              setError('Playback failed - try VLC');
+              setIsLoading(false);
+              return;
+            }
+
             setTimeout(() => hls.startLoad(), 2000);
           } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
             console.log('[Player] Media error, recovering...');

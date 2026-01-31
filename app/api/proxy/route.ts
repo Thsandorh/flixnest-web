@@ -52,6 +52,10 @@ export async function GET(request: NextRequest) {
         customHeaders['user-agent'] ||
         uaParam ||
         defaultUserAgent,
+      'Origin':
+        customHeaders['Origin'] ||
+        customHeaders['origin'] ||
+        targetUrl.origin,
       'Accept': request.headers.get('accept') || '*/*',
       'Accept-Language': 'en-US,en;q=0.9',
       'Referer':
@@ -316,6 +320,10 @@ export async function HEAD(request: NextRequest) {
           customHeaders['user-agent'] ||
           uaParam ||
           defaultUserAgent,
+        'Origin':
+          customHeaders['Origin'] ||
+          customHeaders['origin'] ||
+          new URL(decodedUrl).origin,
         'Referer':
           customHeaders['Referer'] ||
           customHeaders['referer'] ||
