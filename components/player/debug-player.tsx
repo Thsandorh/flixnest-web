@@ -8,9 +8,11 @@ interface DebugPlayerProps {
   src: string;
   poster?: string;
   title?: string;
+  streamHeaders?: Record<string, string>;
+  behaviorHints?: any;
 }
 
-export function DebugPlayer({ src, poster, title }: DebugPlayerProps) {
+export function DebugPlayer({ src, poster, title, streamHeaders, behaviorHints }: DebugPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
@@ -34,6 +36,19 @@ export function DebugPlayer({ src, poster, title }: DebugPlayerProps) {
     setLogs([]);
 
     addLog(`Source: ${src.substring(0, 80)}...`);
+
+    // Log stream metadata
+    if (streamHeaders && Object.keys(streamHeaders).length > 0) {
+      addLog(`📋 Stream Headers: ${JSON.stringify(streamHeaders)}`);
+    } else {
+      addLog(`📋 Stream Headers: none`);
+    }
+
+    if (behaviorHints) {
+      addLog(`🔧 Behavior Hints: ${JSON.stringify(behaviorHints)}`);
+    } else {
+      addLog(`🔧 Behavior Hints: none`);
+    }
 
     const isM3U8 = src.includes('.m3u8');
     addLog(`Is M3U8: ${isM3U8}`);

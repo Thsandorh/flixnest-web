@@ -371,6 +371,8 @@ export default function WatchPage() {
                   ? `${details.name} - S${selectedSeason}:E${selectedEpisode}`
                   : details.title
               }
+              streamHeaders={selectedStream?.headers}
+              behaviorHints={selectedStream?.behaviorHints}
             />
           ) : availableStreams.length > 0 ? (
             <div className="aspect-video bg-gradient-to-br from-zinc-900 to-zinc-800 rounded-xl flex items-center justify-center">
