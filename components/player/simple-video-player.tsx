@@ -2,8 +2,7 @@
 
 import { useRef, useEffect, useState } from 'react';
 import Hls from 'hls.js';
-import { ExternalLink, Copy, Share2 } from 'lucide-react';
-import { buildProxyUrl, getVlcProxyHeaders } from '@/lib/stream-utils';
+import { Copy, Share2 } from 'lucide-react';
 
 interface SimpleVideoPlayerProps {
   src: string;
@@ -39,15 +38,9 @@ export function SimpleVideoPlayer({
     }
 
     setError(null);
-
-    // Use proxy for external URLs to bypass CORS
-    const isExternal = src.startsWith('http://') || src.startsWith('https://');
-    const proxyHeaders = getVlcProxyHeaders(src);
-    const finalUrl = isExternal ? buildProxyUrl(src, proxyHeaders) : src;
     const isM3U8 = src.includes('.m3u8');
 
-    console.log('[SimplePlayer] Original URL:', src.substring(0, 100));
-    console.log('[SimplePlayer] Proxied URL:', finalUrl.substring(0, 150));
+    console.log('[SimplePlayer] Source URL:', src.substring(0, 150));
     console.log('[SimplePlayer] Is M3U8:', isM3U8);
 
     // For M3U8 streams, use HLS.js on Chrome/Firefox, native on Safari/iOS
@@ -58,34 +51,38 @@ export function SimpleVideoPlayer({
           debug: false,
           enableWorker: true,
           maxBufferLength: 30,
+          xhrSetup: (xhr, url) => {
+            // Allow CORS
+            xhr.withCredentials = false;
+          },
         });
 
         hlsRef.current = hls;
-        hls.loadSource(finalUrl);
+        hls.loadSource(src);
         hls.attachMedia(video);
 
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
-          console.log('[SimplePlayer] Manifest loaded, playing...');
+          console.log('[SimplePlayer] Manifest loaded successfully');
           video.play().catch((e) => console.warn('[SimplePlayer] Autoplay prevented:', e));
         });
 
         hls.on(Hls.Events.ERROR, (_, data) => {
-          console.error('[SimplePlayer] HLS Error:', data.type, data.details);
+          console.error('[SimplePlayer] HLS Error:', data.type, data.details, data);
           if (data.fatal) {
-            setError('Playback error - try VLC');
+            setError('Playback error - try external player');
           }
         });
 
       } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
         console.log('[SimplePlayer] Using native HLS (Safari/iOS)');
-        video.src = finalUrl;
+        video.src = src;
       } else {
         console.error('[SimplePlayer] HLS not supported');
         setError('Your browser does not support HLS playback');
       }
     } else {
       console.log('[SimplePlayer] Using native playback');
-      video.src = finalUrl;
+      video.src = src;
     }
 
     return () => {
