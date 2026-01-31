@@ -45,9 +45,9 @@ export function DebugPlayer({ src, poster, title }: DebugPlayerProps) {
         const hls = new Hls({
           debug: true,
           enableWorker: true,
-          xhrSetup: (xhr) => {
+          xhrSetup: (xhr, url) => {
             xhr.withCredentials = false;
-            addLog(`Loading: ${xhr.url?.substring(0, 80)}`);
+            addLog(`Loading: ${url.substring(0, 80)}`);
           },
         });
 
