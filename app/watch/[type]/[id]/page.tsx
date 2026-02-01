@@ -873,7 +873,7 @@ export default function WatchPage() {
                             {selectedStream.name || selectedStream.title || 'Stream'}
                           </p>
                         </div>
-                        <div className="flex items-center gap-3">
+                        <div className="flex flex-wrap items-center gap-3">
                           <button
                             onClick={() => setIsPlayerListExpanded((prev) => !prev)}
                             className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
