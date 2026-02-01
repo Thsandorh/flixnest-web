@@ -955,13 +955,29 @@ export default function WatchPage() {
                             className="group flex items-center justify-between rounded-xl border border-purple-600 bg-purple-600/10 p-4 hover:border-purple-500 hover:bg-purple-600/20 transition-colors"
                           >
                             <div>
-                              <p className="text-white font-semibold">Download M3U File</p>
-                              <p className="text-sm text-purple-300">Download playlist for VLC with headers</p>
+                              <p className="text-white font-semibold">Download M3U</p>
+                              <p className="text-sm text-purple-300">VLC playlist with headers</p>
                             </div>
                             <svg className="w-5 h-5 text-purple-400 group-hover:text-purple-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                             </svg>
                           </button>
+
+                          {/* Download M3U + Subtitle Button */}
+                          {subtitles.length > 0 && selectedSubtitleItem && (
+                            <button
+                              onClick={() => downloadM3UWithSubtitle(playbackUrl, selectedSubtitleItem, details?.title || details?.name, selectedStream?.headers)}
+                              className="group flex items-center justify-between rounded-xl border border-blue-600 bg-blue-600/10 p-4 hover:border-blue-500 hover:bg-blue-600/20 transition-colors"
+                            >
+                              <div>
+                                <p className="text-white font-semibold">Video + Subtitle</p>
+                                <p className="text-sm text-blue-300">M3U with {selectedSubtitleItem.label}</p>
+                              </div>
+                              <svg className="w-5 h-5 text-blue-400 group-hover:text-blue-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                              </svg>
+                            </button>
+                          )}
                         </motion.div>
                       )}
                     </AnimatePresence>
