@@ -1,28 +1,59 @@
 {
   "name": "Flixnest",
   "short_name": "Flixnest",
-  "description": "A modern streaming app for movies and TV shows",
+  "description": "Stream movies and TV shows with external players like VLC",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#09090b",
-  "theme_color": "#09090b",
+  "theme_color": "#dc2626",
   "orientation": "portrait-primary",
+  "scope": "/",
+  "id": "/",
   "icons": [
     {
       "src": "/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
       "src": "/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ],
   "categories": ["entertainment", "video"],
   "screenshots": [],
   "prefer_related_applications": false,
-  "related_applications": []
+  "related_applications": [],
+  "shortcuts": [
+    {
+      "name": "Search",
+      "url": "/search",
+      "description": "Search for movies and TV shows"
+    },
+    {
+      "name": "My List",
+      "url": "/mylist",
+      "description": "View your saved items"
+    },
+    {
+      "name": "Addons",
+      "url": "/addons",
+      "description": "Manage your streaming addons"
+    }
+  ]
 }
