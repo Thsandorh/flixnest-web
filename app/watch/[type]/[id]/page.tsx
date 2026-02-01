@@ -706,7 +706,8 @@ export default function WatchPage() {
     URL.revokeObjectURL(objectUrl);
 
     if (normalizedSubtitle) {
-      await downloadSubtitleFile(normalizedSubtitle, safeTitle || 'stream');
+      const subtitleBaseName = filename.replace(/\.m3u8?$/i, '');
+      await downloadSubtitleFile(normalizedSubtitle, subtitleBaseName || 'stream');
     }
   };
 
