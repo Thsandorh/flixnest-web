@@ -112,6 +112,34 @@ function normalizeStream(stream: Stream): Stream {
   // Use externalUrl if url is not present
   let url = stream.url || stream.externalUrl;
 
+  // Convert infoHash to magnet link if no URL is provided
+  if (!url && stream.infoHash) {
+    const trackers = [
+      'udp://tracker.opentrackr.org:1337/announce',
+      'udp://tracker.openbittorrent.com:6969/announce',
+      'udp://open.stealth.si:80/announce',
+      'udp://tracker.torrent.eu.org:451/announce',
+      'udp://tracker.bittor.pw:1337/announce',
+      'udp://public.popcorn-tracker.org:6969/announce',
+      'udp://tracker.dler.org:6969/announce',
+      'udp://exodus.desync.com:6969',
+      'udp://open.demonii.com:1337/announce'
+    ];
+
+    const trackerParams = trackers.map(t => `&tr=${encodeURIComponent(t)}`).join('');
+    url = `magnet:?xt=urn:btih:${stream.infoHash}${trackerParams}`;
+
+    // Add filename if available
+    if (stream.behaviorHints?.filename) {
+      url += `&dn=${encodeURIComponent(stream.behaviorHints.filename)}`;
+    }
+
+    // Add fileIdx if specified (for multi-file torrents)
+    if (stream.fileIdx !== undefined) {
+      url += `&so=${stream.fileIdx}`;
+    }
+  }
+
   if (url && url.startsWith('//')) {
     url = `https:${url}`;
   }
