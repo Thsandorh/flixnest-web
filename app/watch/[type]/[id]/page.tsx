@@ -370,6 +370,7 @@ export default function WatchPage() {
 
         if (uniqueStreams.length > 0) {
           setAvailableStreams(uniqueStreams);
+          setStreamError(null); // Clear any previous error when streams are found
 
           let preferredStream: Stream | null = null;
           if (isUsaTvContent) {
