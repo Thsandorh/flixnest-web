@@ -9,6 +9,7 @@ import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { useAuthStore, useNotificationStore } from '@/store';
 import { SettingsModal } from './settings-modal';
+import { RegistrationPrompt } from './registration-prompt';
 import { useQuery } from '@tanstack/react-query';
 import axios from 'axios';
 
@@ -423,6 +424,9 @@ export function Navbar() {
 
       {/* Settings Modal */}
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
+
+      {/* Registration Prompt - automatikusan megjelenik első látogatáskor */}
+      <RegistrationPrompt />
     </header>
   );
 }
