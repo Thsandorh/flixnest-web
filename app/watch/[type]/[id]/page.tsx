@@ -888,23 +888,6 @@ export default function WatchPage() {
                             <Copy className="w-4 h-4" />
                             Copy Link
                           </button>
-                          {subtitles.length > 0 && selectedSubtitleItem && (
-                            <button
-                              onClick={() =>
-                                downloadM3UWithSubtitle(
-                                  playbackUrl,
-                                  selectedSubtitleItem,
-                                  details?.title || details?.name,
-                                  selectedStream?.headers
-                                )
-                              }
-                              className="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg transition-colors"
-                              title="Download video with selected subtitle"
-                            >
-                              <Copy className="w-4 h-4" />
-                              Video + Subtitle
-                            </button>
-                          )}
                         </div>
                       </div>
                     </div>
@@ -1059,35 +1042,6 @@ export default function WatchPage() {
             </div>
           </div>
         </div>
-
-        {/* Quick Actions - Sticky bar for Video+Subtitle download */}
-        {selectedStream && playbackUrl && subtitles.length > 0 && selectedSubtitleItem && (
-          <div className="sticky top-16 z-40 mb-4">
-            <div className="flex items-center justify-between gap-3 p-3 rounded-xl border border-blue-600/50 bg-zinc-900/95 backdrop-blur-sm">
-              <div className="flex items-center gap-3 text-sm text-zinc-300">
-                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                <span>Stream ready: {parseStreamInfo(selectedStream).source}</span>
-              </div>
-              <button
-                onClick={() =>
-                  downloadM3UWithSubtitle(
-                    playbackUrl,
-                    selectedSubtitleItem,
-                    details?.title || details?.name,
-                    selectedStream?.headers
-                  )
-                }
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium"
-                title="Download video with selected subtitle"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                </svg>
-                Video + Subtitle
-              </button>
-            </div>
-          </div>
-        )}
 
         {/* Stream Selector */}
         {availableStreams.length > 0 && (
