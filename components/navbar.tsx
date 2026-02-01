@@ -9,6 +9,7 @@ import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { useAuthStore, useNotificationStore } from '@/store';
 import { SettingsModal } from './settings-modal';
+import { RegistrationPrompt, useRegistrationPrompt } from './registration-prompt';
 import { useQuery } from '@tanstack/react-query';
 import axios from 'axios';
 
@@ -54,6 +55,7 @@ export function Navbar() {
   const markAllRead = useNotificationStore((state) => state.markAllRead);
   const clearNotifications = useNotificationStore((state) => state.clearNotifications);
   const unreadCount = notifications.filter((item) => !item.read).length;
+  const { isOpen: isPromptOpen, showPrompt, closePrompt } = useRegistrationPrompt();
 
   // Fetch genres for categories dropdown
   const { data: movieGenres } = useQuery({
@@ -160,6 +162,7 @@ export function Navbar() {
                   setIsCategoriesOpen(!isCategoriesOpen);
                   setIsProfileOpen(false);
                   setIsNotificationsOpen(false);
+                  showPrompt();
                 }}
                 className={cn(
                   'flex items-center gap-1 text-sm font-medium transition-colors',
@@ -423,6 +426,9 @@ export function Navbar() {
 
       {/* Settings Modal */}
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
+
+      {/* Registration Prompt */}
+      <RegistrationPrompt isOpen={isPromptOpen} onClose={closePrompt} />
     </header>
   );
 }

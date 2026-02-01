@@ -8,6 +8,7 @@ import { Home, Search, Bookmark, Puzzle, Menu, Film, Tv, Sparkles, User, Setting
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { useAuthStore } from '@/store';
+import { RegistrationPrompt, useRegistrationPrompt } from './registration-prompt';
 import { useQuery } from '@tanstack/react-query';
 import axios from 'axios';
 
