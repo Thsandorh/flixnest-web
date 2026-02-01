@@ -2,21 +2,36 @@
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Bookmark, Puzzle, Globe, History, Settings } from 'lucide-react';
+import { X, Bookmark, Puzzle, Globe, History } from 'lucide-react';
 import Link from 'next/link';
 import { useAuthStore } from '@/store';
 
 const PROMPT_SHOWN_KEY = 'flixnest-registration-prompt-shown';
+const SHOW_DELAY_MS = 3000; // 3 másodperc után jelenik meg
 
-interface RegistrationPromptProps {
-  isOpen: boolean;
-  onClose: () => void;
-}
+export function RegistrationPrompt() {
+  const [isOpen, setIsOpen] = useState(false);
+  const { isAuthenticated } = useAuthStore();
 
-export function RegistrationPrompt({ isOpen, onClose }: RegistrationPromptProps) {
+  useEffect(() => {
+    // Ne mutasd ha be van jelentkezve
+    if (isAuthenticated) return;
+
+    // Ne mutasd ha már látta
+    const hasShown = localStorage.getItem(PROMPT_SHOWN_KEY);
+    if (hasShown) return;
+
+    // 3 mp után megjelenik
+    const timer = setTimeout(() => {
+      setIsOpen(true);
+    }, SHOW_DELAY_MS);
+
+    return () => clearTimeout(timer);
+  }, [isAuthenticated]);
+
   const handleClose = () => {
     localStorage.setItem(PROMPT_SHOWN_KEY, 'true');
-    onClose();
+    setIsOpen(false);
   };
 
   return (
@@ -122,28 +137,4 @@ export function RegistrationPrompt({ isOpen, onClose }: RegistrationPromptProps)
       )}
     </AnimatePresence>
   );
-}
-
-export function useRegistrationPrompt() {
-  const [isOpen, setIsOpen] = useState(false);
-  const { isAuthenticated } = useAuthStore();
-
-  const showPrompt = () => {
-    if (isAuthenticated) return;
-
-    const hasShown = localStorage.getItem(PROMPT_SHOWN_KEY);
-    if (!hasShown) {
-      setIsOpen(true);
-    }
-  };
-
-  const closePrompt = () => {
-    setIsOpen(false);
-  };
-
-  return {
-    isOpen,
-    showPrompt,
-    closePrompt,
-  };
 }

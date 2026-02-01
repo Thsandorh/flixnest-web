@@ -8,7 +8,6 @@ import { Home, Search, Bookmark, Puzzle, Menu, Film, Tv, Sparkles, User, Setting
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { useAuthStore } from '@/store';
-import { RegistrationPrompt, useRegistrationPrompt } from './registration-prompt';
 import { useQuery } from '@tanstack/react-query';
 import axios from 'axios';
 
@@ -77,7 +76,6 @@ export function MobileNav() {
   const [isMovieGenresOpen, setIsMovieGenresOpen] = useState(false);
   const [isTvGenresOpen, setIsTvGenresOpen] = useState(false);
   const { user, isAuthenticated, logout } = useAuthStore();
-  const { isOpen: isPromptOpen, showPrompt, closePrompt } = useRegistrationPrompt();
 
   // Fetch genres
   const { data: movieGenres } = useQuery({
@@ -227,10 +225,7 @@ export function MobileNav() {
                   <div className="space-y-2">
                     {/* Movie Genres Dropdown */}
                     <button
-                      onClick={() => {
-                        setIsMovieGenresOpen(!isMovieGenresOpen);
-                        showPrompt();
-                      }}
+                      onClick={() => setIsMovieGenresOpen(!isMovieGenresOpen)}
                       className="w-full flex items-center justify-between gap-3 p-3 rounded-lg bg-zinc-800/50 text-zinc-300 hover:bg-zinc-800 transition-colors"
                     >
                       <div className="flex items-center gap-3">
@@ -265,10 +260,7 @@ export function MobileNav() {
 
                     {/* TV Genres Dropdown */}
                     <button
-                      onClick={() => {
-                        setIsTvGenresOpen(!isTvGenresOpen);
-                        showPrompt();
-                      }}
+                      onClick={() => setIsTvGenresOpen(!isTvGenresOpen)}
                       className="w-full flex items-center justify-between gap-3 p-3 rounded-lg bg-zinc-800/50 text-zinc-300 hover:bg-zinc-800 transition-colors"
                     >
                       <div className="flex items-center gap-3">
@@ -356,9 +348,6 @@ export function MobileNav() {
           </>
         )}
       </AnimatePresence>
-
-      {/* Registration Prompt */}
-      <RegistrationPrompt isOpen={isPromptOpen} onClose={closePrompt} />
     </>
   );
 }
