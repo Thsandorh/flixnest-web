@@ -4,13 +4,28 @@ import { useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Home, Search, Bookmark, Puzzle, Menu, Film, Tv, Sparkles, User, Settings, LogOut, LogIn, X } from 'lucide-react';
+import { Home, Search, Bookmark, Puzzle, Menu, Film, Tv, Sparkles, User, Settings, LogOut, LogIn, X, Tag, ChevronDown } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { useAuthStore } from '@/store';
+import { useQuery } from '@tanstack/react-query';
+import axios from 'axios';
 
 function cn(...inputs: (string | undefined | null | boolean)[]) {
   return twMerge(clsx(inputs));
+}
+
+const TMDB_API_KEY = 'ffe7ef8916c61835264d2df68276ddc2';
+const TMDB_BASE = 'https://api.themoviedb.org/3';
+
+async function fetchMovieGenres() {
+  const { data } = await axios.get(`${TMDB_BASE}/genre/movie/list?api_key=${TMDB_API_KEY}`);
+  return data.genres;
+}
+
+async function fetchTVGenres() {
+  const { data } = await axios.get(`${TMDB_BASE}/genre/tv/list?api_key=${TMDB_API_KEY}`);
+  return data.genres;
 }
 
 const navItems = [
@@ -58,12 +73,22 @@ export function MobileNav() {
   const pathname = usePathname();
   const router = useRouter();
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
+  const [isMovieGenresOpen, setIsMovieGenresOpen] = useState(false);
+  const [isTvGenresOpen, setIsTvGenresOpen] = useState(false);
   const { user, isAuthenticated, logout } = useAuthStore();
 
-  // Hide on watch pages
-  if (pathname.startsWith('/watch')) {
-    return null;
-  }
+  // Fetch genres
+  const { data: movieGenres } = useQuery({
+    queryKey: ['movie-genres'],
+    queryFn: fetchMovieGenres,
+    staleTime: 1000 * 60 * 60,
+  });
+
+  const { data: tvGenres } = useQuery({
+    queryKey: ['tv-genres'],
+    queryFn: fetchTVGenres,
+    staleTime: 1000 * 60 * 60,
+  });
 
   const handleSignOut = () => {
     logout();
@@ -189,6 +214,84 @@ export function MobileNav() {
                         </Link>
                       );
                     })}
+                  </div>
+                </div>
+
+                {/* Categories Section */}
+                <div>
+                  <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3">
+                    Categories
+                  </p>
+                  <div className="space-y-2">
+                    {/* Movie Genres Dropdown */}
+                    <button
+                      onClick={() => setIsMovieGenresOpen(!isMovieGenresOpen)}
+                      className="w-full flex items-center justify-between gap-3 p-3 rounded-lg bg-zinc-800/50 text-zinc-300 hover:bg-zinc-800 transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <Film className="w-5 h-5" />
+                        <span className="font-medium">Movie Genres</span>
+                      </div>
+                      <ChevronDown className={cn('w-4 h-4 transition-transform', isMovieGenresOpen && 'rotate-180')} />
+                    </button>
+                    <AnimatePresence>
+                      {isMovieGenresOpen && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: 'auto' }}
+                          exit={{ opacity: 0, height: 0 }}
+                          className="overflow-hidden"
+                        >
+                          <div className="grid grid-cols-2 gap-1 pl-3 pt-1">
+                            {movieGenres?.map((genre: any) => (
+                              <Link
+                                key={genre.id}
+                                href={`/discover/movie/${genre.id}`}
+                                onClick={() => setIsMoreMenuOpen(false)}
+                                className="px-3 py-2 text-sm text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
+                              >
+                                {genre.name}
+                              </Link>
+                            ))}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+
+                    {/* TV Genres Dropdown */}
+                    <button
+                      onClick={() => setIsTvGenresOpen(!isTvGenresOpen)}
+                      className="w-full flex items-center justify-between gap-3 p-3 rounded-lg bg-zinc-800/50 text-zinc-300 hover:bg-zinc-800 transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <Tv className="w-5 h-5" />
+                        <span className="font-medium">TV Genres</span>
+                      </div>
+                      <ChevronDown className={cn('w-4 h-4 transition-transform', isTvGenresOpen && 'rotate-180')} />
+                    </button>
+                    <AnimatePresence>
+                      {isTvGenresOpen && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: 'auto' }}
+                          exit={{ opacity: 0, height: 0 }}
+                          className="overflow-hidden"
+                        >
+                          <div className="grid grid-cols-2 gap-1 pl-3 pt-1">
+                            {tvGenres?.map((genre: any) => (
+                              <Link
+                                key={genre.id}
+                                href={`/discover/tv/${genre.id}`}
+                                onClick={() => setIsMoreMenuOpen(false)}
+                                className="px-3 py-2 text-sm text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
+                              >
+                                {genre.name}
+                              </Link>
+                            ))}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
                 </div>
 

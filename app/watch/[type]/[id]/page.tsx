@@ -603,10 +603,12 @@ export default function WatchPage() {
 
   const downloadM3U = (url: string, title?: string, headers?: Record<string, string>) => {
     const normalizedUrl = normalizeStreamUrl(url);
-    const safeTitle = (title || 'stream').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    const displayTitle = title || 'Stream';
+    const safeTitle = displayTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
     const filename = safeTitle ? `${safeTitle}.m3u` : 'stream.m3u';
     const headerOptions = buildVlcHeaderOptions(headers);
-    const content = ['#EXTM3U', ...headerOptions, normalizedUrl, ''].join('\n');
+    // Add EXTINF with title so VLC displays the movie name
+    const content = ['#EXTM3U', ...headerOptions, `#EXTINF:-1,${displayTitle}`, normalizedUrl, ''].join('\n');
 
     const blob = new Blob([content], { type: 'audio/x-mpegurl' });
     const objectUrl = URL.createObjectURL(blob);
@@ -674,7 +676,8 @@ export default function WatchPage() {
     headers?: Record<string, string>
   ) => {
     const normalizedUrl = normalizeStreamUrl(url);
-    const safeTitle = (title || 'stream')
+    const displayTitle = title || 'Stream';
+    const safeTitle = displayTitle
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '');
@@ -687,6 +690,8 @@ export default function WatchPage() {
     if (normalizedSubtitle) {
       lines.push(`#EXTVLCOPT:input-slave=${normalizedSubtitle}`);
     }
+    // Add EXTINF with title so VLC displays the movie name
+    lines.push(`#EXTINF:-1,${displayTitle}`);
     lines.push(normalizedUrl, '');
     const content = lines.join('\n');
 
@@ -1029,6 +1034,35 @@ export default function WatchPage() {
             </div>
           </div>
         </div>
+
+        {/* Quick Actions - Sticky bar for Video+Subtitle download */}
+        {selectedStream && playbackUrl && subtitles.length > 0 && selectedSubtitleItem && (
+          <div className="sticky top-16 z-40 mb-4">
+            <div className="flex items-center justify-between gap-3 p-3 rounded-xl border border-blue-600/50 bg-zinc-900/95 backdrop-blur-sm">
+              <div className="flex items-center gap-3 text-sm text-zinc-300">
+                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                <span>Stream ready: {parseStreamInfo(selectedStream).source}</span>
+              </div>
+              <button
+                onClick={() =>
+                  downloadM3UWithSubtitle(
+                    playbackUrl,
+                    selectedSubtitleItem,
+                    details?.title || details?.name,
+                    selectedStream?.headers
+                  )
+                }
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium"
+                title="Download video with selected subtitle"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                Video + Subtitle
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Stream Selector */}
         {availableStreams.length > 0 && (
