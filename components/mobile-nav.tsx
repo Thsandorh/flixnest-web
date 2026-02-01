@@ -8,6 +8,7 @@ import { Home, Search, Bookmark, Puzzle, Menu, Film, Tv, Sparkles, User, Setting
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { useAuthStore } from '@/store';
+import { RegistrationPrompt } from './registration-prompt';
 import { useQuery } from '@tanstack/react-query';
 import axios from 'axios';
 
@@ -348,6 +349,9 @@ export function MobileNav() {
           </>
         )}
       </AnimatePresence>
+
+      {/* Registration Prompt - mobilon is megjelenik */}
+      <RegistrationPrompt />
     </>
   );
 }
