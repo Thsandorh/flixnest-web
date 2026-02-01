@@ -4,14 +4,29 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Bell, ChevronDown, User, Settings, LogOut, Puzzle, Bookmark, Play, LogIn } from 'lucide-react';
+import { Search, Bell, ChevronDown, User, Settings, LogOut, Puzzle, Bookmark, Play, LogIn, Tag } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { useAuthStore, useNotificationStore } from '@/store';
 import { SettingsModal } from './settings-modal';
+import { useQuery } from '@tanstack/react-query';
+import axios from 'axios';
 
 function cn(...inputs: (string | undefined | null | boolean)[]) {
   return twMerge(clsx(inputs));
+}
+
+const TMDB_API_KEY = 'ffe7ef8916c61835264d2df68276ddc2';
+const TMDB_BASE = 'https://api.themoviedb.org/3';
+
+async function fetchMovieGenres() {
+  const { data } = await axios.get(`${TMDB_BASE}/genre/movie/list?api_key=${TMDB_API_KEY}`);
+  return data.genres;
+}
+
+async function fetchTVGenres() {
+  const { data } = await axios.get(`${TMDB_BASE}/genre/tv/list?api_key=${TMDB_API_KEY}`);
+  return data.genres;
 }
 
 const navLinks = [
@@ -32,12 +47,26 @@ export function Navbar() {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isCategoriesOpen, setIsCategoriesOpen] = useState(false);
 
   const { user, isAuthenticated, logout } = useAuthStore();
   const notifications = useNotificationStore((state) => state.notifications);
   const markAllRead = useNotificationStore((state) => state.markAllRead);
   const clearNotifications = useNotificationStore((state) => state.clearNotifications);
   const unreadCount = notifications.filter((item) => !item.read).length;
+
+  // Fetch genres for categories dropdown
+  const { data: movieGenres } = useQuery({
+    queryKey: ['movie-genres'],
+    queryFn: fetchMovieGenres,
+    staleTime: 1000 * 60 * 60, // 1 hour
+  });
+
+  const { data: tvGenres } = useQuery({
+    queryKey: ['tv-genres'],
+    queryFn: fetchTVGenres,
+    staleTime: 1000 * 60 * 60, // 1 hour
+  });
 
   const handleSignOut = () => {
     logout();
@@ -60,6 +89,7 @@ export function Navbar() {
     setIsMobileMenuOpen(false);
     setIsProfileOpen(false);
     setIsNotificationsOpen(false);
+    setIsCategoriesOpen(false);
   }, [pathname]);
 
   const formatNotificationTime = (timestamp: number) =>
@@ -122,6 +152,88 @@ export function Navbar() {
                 </Link>
               );
             })}
+
+            {/* Categories Dropdown */}
+            <div className="relative">
+              <button
+                onClick={() => {
+                  setIsCategoriesOpen(!isCategoriesOpen);
+                  setIsProfileOpen(false);
+                  setIsNotificationsOpen(false);
+                }}
+                className={cn(
+                  'flex items-center gap-1 text-sm font-medium transition-colors',
+                  isCategoriesOpen ? 'text-white' : 'text-zinc-400 hover:text-white'
+                )}
+              >
+                <Tag className="w-4 h-4" />
+                Categories
+                <ChevronDown
+                  className={cn(
+                    'w-4 h-4 transition-transform',
+                    isCategoriesOpen && 'rotate-180'
+                  )}
+                />
+              </button>
+
+              <AnimatePresence>
+                {isCategoriesOpen && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-40"
+                      onClick={() => setIsCategoriesOpen(false)}
+                    />
+                    <motion.div
+                      initial={{ opacity: 0, y: 10, scale: 0.98 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 10, scale: 0.98 }}
+                      transition={{ duration: 0.15 }}
+                      className="absolute left-0 top-full mt-2 w-[480px] z-50 glass rounded-xl shadow-2xl overflow-hidden"
+                    >
+                      <div className="grid grid-cols-2 divide-x divide-zinc-800">
+                        {/* Movie Genres */}
+                        <div className="p-4">
+                          <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3">
+                            Movie Genres
+                          </p>
+                          <div className="space-y-1 max-h-[300px] overflow-y-auto">
+                            {movieGenres?.map((genre: any) => (
+                              <Link
+                                key={genre.id}
+                                href={`/discover/movie/${genre.id}`}
+                                onClick={() => setIsCategoriesOpen(false)}
+                                className="block px-3 py-2 text-sm text-zinc-300 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
+                              >
+                                {genre.name}
+                              </Link>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* TV Genres */}
+                        <div className="p-4">
+                          <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3">
+                            TV Genres
+                          </p>
+                          <div className="space-y-1 max-h-[300px] overflow-y-auto">
+                            {tvGenres?.map((genre: any) => (
+                              <Link
+                                key={genre.id}
+                                href={`/discover/tv/${genre.id}`}
+                                onClick={() => setIsCategoriesOpen(false)}
+                                className="block px-3 py-2 text-sm text-zinc-300 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
+                              >
+                                {genre.name}
+                              </Link>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </motion.div>
+                  </>
+                )}
+              </AnimatePresence>
+            </div>
           </div>
 
           {/* Right Section */}

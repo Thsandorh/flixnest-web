@@ -309,17 +309,6 @@ export default function HomePage() {
           />
         )}
 
-        {/* Addon Catalogs */}
-        {addonCatalogRows?.map((row) => (
-          <InfiniteMediaRow
-            key={row.key}
-            title={row.title}
-            items={row.items}
-            isLoading={addonCatalogsLoading}
-            defaultType={row.defaultType}
-          />
-        ))}
-
         {/* Trending Now */}
         <InfiniteMediaRow
           title="Trending Now"
@@ -359,6 +348,17 @@ export default function HomePage() {
           isLoading={actionLoading}
           defaultType="movie"
         />
+
+        {/* Addon Catalogs - Always below TMDB categories */}
+        {addonCatalogRows?.map((row) => (
+          <InfiniteMediaRow
+            key={row.key}
+            title={row.title}
+            items={row.items}
+            isLoading={addonCatalogsLoading}
+            defaultType={row.defaultType}
+          />
+        ))}
       </div>
     </main>
   );
