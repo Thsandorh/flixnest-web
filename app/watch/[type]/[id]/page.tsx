@@ -701,7 +701,8 @@ export default function WatchPage() {
     URL.revokeObjectURL(objectUrl);
 
     if (normalizedSubtitle) {
-      await downloadSubtitleFile(normalizedSubtitle, safeTitle || 'stream');
+      const subtitleBaseName = filename.replace(/\.m3u8?$/i, '');
+      await downloadSubtitleFile(normalizedSubtitle, subtitleBaseName || 'stream');
     }
   };
 
@@ -883,23 +884,6 @@ export default function WatchPage() {
                             <Copy className="w-4 h-4" />
                             Copy Link
                           </button>
-                          {subtitles.length > 0 && selectedSubtitleItem && (
-                            <button
-                              onClick={() =>
-                                downloadM3UWithSubtitle(
-                                  playbackUrl,
-                                  selectedSubtitleItem,
-                                  details?.title || details?.name,
-                                  selectedStream?.headers
-                                )
-                              }
-                              className="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg transition-colors"
-                              title="Download video with selected subtitle"
-                            >
-                              <Copy className="w-4 h-4" />
-                              Video + Subtitle
-                            </button>
-                          )}
                         </div>
                       </div>
                     </div>
@@ -949,21 +933,6 @@ export default function WatchPage() {
                             );
                           })}
 
-                          {/* Download M3U + Subtitle Button */}
-                          {subtitles.length > 0 && selectedSubtitleItem && (
-                            <button
-                              onClick={() => downloadM3UWithSubtitle(playbackUrl, selectedSubtitleItem, details?.title || details?.name, selectedStream?.headers)}
-                              className="group flex items-center justify-between rounded-xl border border-blue-600 bg-blue-600/10 p-4 hover:border-blue-500 hover:bg-blue-600/20 transition-colors"
-                            >
-                              <div>
-                                <p className="text-white font-semibold">Video + Subtitle</p>
-                                <p className="text-sm text-blue-300">M3U with {selectedSubtitleItem.label}</p>
-                              </div>
-                              <svg className="w-5 h-5 text-blue-400 group-hover:text-blue-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                              </svg>
-                            </button>
-                          )}
                         </motion.div>
                       )}
                     </AnimatePresence>
