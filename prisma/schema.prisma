@@ -1,0 +1,74 @@
+generator client {
+  provider = "prisma-client-js"
+  engineType = "binary"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  addons        Addon[]
+  watchlist     WatchlistItem[]
+  history       HistoryItem[]
+}
+
+model Addon {
+  id          String   @id @default(cuid())
+  addonId     String   // The Stremio addon ID
+  name        String
+  manifest    String
+  version     String
+  description String?
+  types       String   // JSON stringified array
+  catalogs    String?  // JSON stringified array
+  resources   String?  // JSON stringified array
+  isActive    Boolean  @default(true)
+  
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, manifest])
+}
+
+model WatchlistItem {
+  id        String   @id @default(cuid())
+  mediaId   String   // The IMDB ID or similar
+  type      String   // movie or tv
+  title     String
+  poster    String
+  backdrop  String?
+  addedAt   DateTime @default(now())
+
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, mediaId])
+}
+
+model HistoryItem {
+  id              String   @id @default(cuid())
+  mediaId         String
+  type            String   // movie or tv
+  title           String
+  poster          String
+  backdrop        String?
+  season          Int?
+  episode         Int?
+  episodeTitle    String?
+  progress        Float    @default(0)
+  duration        Float    @default(0)
+  lastWatchedAt   DateTime @default(now())
+  watchedEpisodes String?  // JSON stringified object Record<string, boolean>
+
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, mediaId])
+}

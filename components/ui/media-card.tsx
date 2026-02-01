@@ -61,11 +61,29 @@ export function MediaCard({
   }
 
   // Image URL
+  const resolveImageUrl = (path?: string, size: 'w780' | 'w500' = 'w500') => {
+    if (!path) return '/placeholder.svg';
+
+    let absoluteUrl = '';
+
+    if (/^https?:\/\//i.test(path)) {
+      absoluteUrl = path;
+    } else if (path.startsWith('//')) {
+      absoluteUrl = `https:${path}`;
+    } else {
+      absoluteUrl = `https://image.tmdb.org/t/p/${size}${path}`;
+    }
+
+    if (!absoluteUrl.startsWith('https://image.tmdb.org/')) {
+      return `/api/image?url=${encodeURIComponent(absoluteUrl)}`;
+    }
+
+    return absoluteUrl;
+  };
+
   const imageUrl = variant === 'wide' && backdrop
-    ? `https://image.tmdb.org/t/p/w780${backdrop}`
-    : poster
-    ? `https://image.tmdb.org/t/p/w500${poster}`
-    : '/placeholder.svg';
+    ? resolveImageUrl(backdrop, 'w780')
+    : resolveImageUrl(poster, 'w500');
 
   const aspectRatio = variant === 'wide' || variant === 'continue' ? 'aspect-video' : 'aspect-[2/3]';
 

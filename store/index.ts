@@ -10,6 +10,7 @@ export interface Addon {
   description?: string;
   types: string[];
   catalogs?: string[];
+  resources?: string[];
 }
 
 export interface HistoryItem {
@@ -37,6 +38,36 @@ export interface WatchlistItem {
   addedAt: number;
 }
 
+const SUBMAKER_MANIFEST_HINT = 'submaker.elfhosted.com';
+const BLOCKED_MANIFEST_HOSTS = new Set<string>();
+const REMOVED_ADDON_MANIFESTS = new Set<string>();
+
+const isBlockedManifest = (manifest?: string): boolean => {
+  if (!manifest) return false;
+  if (REMOVED_ADDON_MANIFESTS.has(manifest)) return true;
+  try {
+    const host = new URL(manifest).hostname.toLowerCase();
+    return BLOCKED_MANIFEST_HOSTS.has(host);
+  } catch {
+    return false;
+  }
+};
+
+const normalizeAddon = (addon: Addon): Addon => {
+  if (!addon.manifest) return addon;
+  if (!addon.manifest.includes(SUBMAKER_MANIFEST_HINT)) return addon;
+
+  if (addon.resources && addon.resources.length > 0) {
+    return addon;
+  }
+
+  return {
+    ...addon,
+    resources: ['subtitles'],
+  };
+};
+
+
 // Default addons - all active by default
 const DEFAULT_ADDONS: Addon[] = [
   {
@@ -48,22 +79,187 @@ const DEFAULT_ADDONS: Addon[] = [
     types: ['movie', 'series'],
   },
   {
-    id: 'flixnest-webstreamr',
-    name: 'FlixNest WebStreamr',
-    manifest: 'https://flixnest.app/addon/webstreamr/manifest.json',
-    version: '1.0.0',
-    description: 'FlixNest streaming addon',
-    types: ['movie', 'series'],
-  },
-  {
     id: 'nuviostreams',
     name: 'NuvioStreams',
-    manifest: 'https://nuviostreams.hayd.uk/manifest.json',
+    manifest:
+      'https://nuviostreams.hayd.uk/providers=showbox,vidzee,vidsrc,vixsrc,mp4hydra,uhdmovies,moviesdrive,4khdhub,hdhub4u,topmovies/manifest.json',
     version: '1.0.0',
     description: 'Nuvio streaming service',
     types: ['movie', 'series'],
   },
+  {
+    id: 'usatv',
+    name: 'USA TV',
+    manifest: 'https://848b3516657c-usatv.baby-beamup.club/manifest.json',
+    version: '1.0.0',
+    description: 'USA TV catalog addon',
+    types: ['tv'],
+    resources: ['catalog', 'stream'],
+  },
+  {
+    id: 'submaker',
+    name: 'SubMaker',
+    manifest: 'https://submaker.elfhosted.com/addon/e1f195feeb10907f481697054dc902f6/manifest.json',
+    version: '1.0.0',
+    description: 'Subtitle provider',
+    types: ['movie', 'series'],
+    resources: ['subtitles'],
+  },
+  {
+    id: 'netflix-catalog',
+    name: 'Netflix Catalog',
+    manifest: 'https://7a82163c306e-stremio-netflix-catalog-addon.baby-beamup.club/manifest.json',
+    version: '1.0.0',
+    description: 'Netflix catalog addon',
+    types: ['movie', 'series'],
+    resources: ['catalog'],
+  },
 ];
+
+const DEFAULT_ADDONS_NORMALIZED = DEFAULT_ADDONS.map(normalizeAddon);
+
+const filterRemovedAddons = (addons: Addon[]): Addon[] =>
+  addons.filter((addon) => !isBlockedManifest(addon.manifest));
+
+const mergeDefaultAddons = (addons: Addon[]): Addon[] => {
+  const merged = filterRemovedAddons(addons.map(normalizeAddon));
+  const seen = new Set(merged.map((addon) => addon.manifest));
+
+  for (const addon of DEFAULT_ADDONS_NORMALIZED) {
+    if (seen.has(addon.manifest)) continue;
+    merged.push(addon);
+    seen.add(addon.manifest);
+  }
+
+  return merged;
+};
+
+const ensureUniqueAddonIds = (addons: Addon[]): Addon[] => {
+  const seen = new Set<string>();
+  const result: Addon[] = [];
+
+  for (const addon of addons) {
+    let uniqueId = addon.id;
+    let counter = 1;
+
+    // If ID already exists, append a number to make it unique
+    while (seen.has(uniqueId)) {
+      uniqueId = `${addon.id}-${counter}`;
+      counter++;
+    }
+
+    seen.add(uniqueId);
+    result.push(uniqueId === addon.id ? addon : { ...addon, id: uniqueId });
+  }
+
+  return result;
+};
+
+const filterActiveAddons = (addons: Addon[], activeAddons: Addon[]): Addon[] => {
+  const byId = new Map(addons.map((addon) => [addon.id, addon]));
+  const byManifest = new Map(addons.map((addon) => [addon.manifest, addon]));
+  const seen = new Set<string>();
+  const filtered: Addon[] = [];
+
+  for (const addon of activeAddons) {
+    const match = byId.get(addon.id) || byManifest.get(addon.manifest);
+    if (!match || seen.has(match.id)) continue;
+    filtered.push(match);
+    seen.add(match.id);
+  }
+
+  return filtered;
+};
+
+// Auth Store
+export interface User {
+  id: string;
+  email: string;
+}
+
+interface AuthState {
+  user: User | null;
+  token: string | null;
+  isAuthenticated: boolean;
+  login: (email: string, token: string, user: User) => void;
+  logout: () => void;
+  syncData: () => Promise<void>;
+  fetchUserData: () => Promise<void>;
+}
+
+export const useAuthStore = create<AuthState>()(
+  persist(
+    (set, get) => ({
+      user: null,
+      token: null,
+      isAuthenticated: false,
+      login: (email, token, user) => {
+        set({ user, token, isAuthenticated: true });
+        get().fetchUserData();
+      },
+      logout: () => {
+        set({ user: null, token: null, isAuthenticated: false });
+        // Optionally clear other stores on logout
+        useAddonStore.getState().reset();
+        useHistoryStore.getState().clearHistory();
+        useWatchlistStore.getState().clearWatchlist();
+      },
+      syncData: async () => {
+        const { token, isAuthenticated } = get();
+        if (!isAuthenticated || !token) return;
+
+        const addons = useAddonStore.getState().addons;
+        const watchlist = useWatchlistStore.getState().watchlist;
+        const history = useHistoryStore.getState().history;
+
+        try {
+          await fetch('/api/user/sync', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify({ addons, watchlist, history }),
+          });
+        } catch (error) {
+          console.error('Failed to sync data:', error);
+        }
+      },
+      fetchUserData: async () => {
+        const { token, isAuthenticated } = get();
+        if (!isAuthenticated || !token) return;
+
+        try {
+          const response = await fetch('/api/user/data', {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+            },
+          });
+          
+          const contentType = response.headers.get('content-type');
+          if (!contentType || !contentType.includes('application/json')) {
+            const text = await response.text();
+            console.error('Expected JSON but got:', text.substring(0, 100));
+            return;
+          }
+
+          const data = await response.json();
+          if (response.ok) {
+            if (data.addons) useAddonStore.setState({ addons: data.addons, activeAddons: data.addons });
+            if (data.watchlist) useWatchlistStore.setState({ watchlist: data.watchlist });
+            if (data.history) useHistoryStore.setState({ history: data.history });
+          }
+        } catch (error) {
+          console.error('Failed to fetch user data:', error);
+        }
+      },
+    }),
+    {
+      name: 'flixnest-auth',
+      storage: createJSONStorage(() => localStorage),
+    }
+  )
+);
 
 // Addon Store - supports multiple active addons
 interface AddonState {
@@ -74,29 +270,45 @@ interface AddonState {
   toggleAddonActive: (id: string) => void;
   isAddonActive: (id: string) => boolean;
   getAddonByManifest: (manifest: string) => Addon | undefined;
+  reset: () => void;
 }
 
 export const useAddonStore = create<AddonState>()(
   persist(
     (set, get) => ({
-      addons: DEFAULT_ADDONS,
-      activeAddons: DEFAULT_ADDONS,
+      addons: DEFAULT_ADDONS_NORMALIZED,
+      activeAddons: DEFAULT_ADDONS_NORMALIZED,
+
+      reset: () => set({ addons: DEFAULT_ADDONS_NORMALIZED, activeAddons: DEFAULT_ADDONS_NORMALIZED }),
 
       addAddon: (addon) =>
         set((state) => {
-          const exists = state.addons.some((a) => a.manifest === addon.manifest);
+          const normalized = normalizeAddon(addon);
+          if (isBlockedManifest(normalized.manifest)) {
+            return state;
+          }
+          const exists = state.addons.some((a) => a.manifest === normalized.manifest);
           if (exists) return state;
+          const nextAddons = ensureUniqueAddonIds([...state.addons, normalized]);
+          const nextActive = filterActiveAddons(nextAddons, [...state.activeAddons, normalized]);
           return {
-            addons: [...state.addons, addon],
-            activeAddons: [...state.activeAddons, addon],
+            addons: nextAddons,
+            activeAddons: nextActive,
           };
         }),
 
       removeAddon: (id) =>
-        set((state) => ({
-          addons: state.addons.filter((a) => a.id !== id),
-          activeAddons: state.activeAddons.filter((a) => a.id !== id),
-        })),
+        set((state) => {
+          const nextAddons = state.addons.filter((a) => a.id !== id);
+          const nextActive = filterActiveAddons(
+            nextAddons,
+            state.activeAddons.filter((a) => a.id !== id)
+          );
+          return {
+            addons: nextAddons,
+            activeAddons: nextActive,
+          };
+        }),
 
       toggleAddonActive: (id) =>
         set((state) => {
@@ -105,14 +317,22 @@ export const useAddonStore = create<AddonState>()(
 
           const isActive = state.activeAddons.some((a) => a.id === id);
           if (isActive) {
+            const nextActive = filterActiveAddons(
+              state.addons,
+              state.activeAddons.filter((a) => a.id !== id)
+            );
             return {
-              activeAddons: state.activeAddons.filter((a) => a.id !== id),
-            };
-          } else {
-            return {
-              activeAddons: [...state.activeAddons, addon],
+              activeAddons: nextActive,
             };
           }
+
+          const nextActive = filterActiveAddons(
+            state.addons,
+            [...state.activeAddons, addon]
+          );
+          return {
+            activeAddons: nextActive,
+          };
         }),
 
       isAddonActive: (id) => get().activeAddons.some((a) => a.id === id),
@@ -122,6 +342,28 @@ export const useAddonStore = create<AddonState>()(
     {
       name: 'flixnest-addons',
       storage: createJSONStorage(() => localStorage),
+      merge: (persistedState, currentState) => {
+        if (!persistedState) return currentState;
+
+        const persisted = persistedState as Partial<AddonState>;
+        const hasPersistedAddons = Array.isArray(persisted.addons);
+        const hasPersistedActive = Array.isArray(persisted.activeAddons);
+
+        const baseAddons = hasPersistedAddons ? persisted.addons ?? [] : currentState.addons;
+        const mergedAddons = mergeDefaultAddons(baseAddons);
+        const baseActive = hasPersistedActive ? persisted.activeAddons ?? [] : currentState.activeAddons;
+        const filteredActive = filterActiveAddons(mergedAddons, filterRemovedAddons(baseActive));
+        const knownManifests = new Set(baseAddons.map((addon) => addon.manifest));
+        const newlyAddedDefaults = mergedAddons.filter((addon) => !knownManifests.has(addon.manifest));
+        const nextActive = filterActiveAddons(mergedAddons, [...filteredActive, ...newlyAddedDefaults]);
+
+        return {
+          ...currentState,
+          ...persisted,
+          addons: mergedAddons,
+          activeAddons: nextActive,
+        };
+      },
     }
   )
 );
@@ -283,6 +525,66 @@ export const useWatchlistStore = create<WatchlistState>()(
   )
 );
 
+export interface AppNotification {
+  id: string;
+  key?: string;
+  title: string;
+  message?: string;
+  type?: 'info' | 'success' | 'warning' | 'error';
+  createdAt: number;
+  read: boolean;
+}
+
+interface NotificationState {
+  notifications: AppNotification[];
+  addNotification: (notification: Omit<AppNotification, 'id' | 'createdAt' | 'read'>) => void;
+  markAsRead: (id: string) => void;
+  markAllRead: () => void;
+  clearNotifications: () => void;
+}
+
+export const useNotificationStore = create<NotificationState>()(
+  persist(
+    (set, get) => ({
+      notifications: [],
+      addNotification: (notification) =>
+        set((state) => {
+          if (notification.key && state.notifications.some((item) => item.key === notification.key)) {
+            return state;
+          }
+          const id =
+            typeof crypto !== 'undefined' && 'randomUUID' in crypto
+              ? crypto.randomUUID()
+              : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+          const next: AppNotification = {
+            ...notification,
+            id,
+            createdAt: Date.now(),
+            read: false,
+          };
+          return { notifications: [next, ...state.notifications].slice(0, 50) };
+        }),
+      markAsRead: (id) =>
+        set((state) => ({
+          notifications: state.notifications.map((item) =>
+            item.id === id ? { ...item, read: true } : item
+          ),
+        })),
+      markAllRead: () =>
+        set((state) => ({
+          notifications: state.notifications.map((item) =>
+            item.read ? item : { ...item, read: true }
+          ),
+        })),
+      clearNotifications: () => set({ notifications: [] }),
+    }),
+    {
+      name: 'flixnest-notifications',
+      storage: createJSONStorage(() => localStorage),
+    }
+  )
+);
+
 // UI Store
 interface UIState {
   isMobile: boolean;
@@ -297,3 +599,51 @@ export const useUIStore = create<UIState>((set) => ({
   setIsMobile: (value) => set({ isMobile: value }),
   setIsPlayerFullscreen: (value) => set({ isPlayerFullscreen: value }),
 }));
+
+// Settings Store
+export interface SubtitlePreference {
+  language: string; // ISO 639-1 code (e.g., 'en', 'hu', 'es')
+  enabled: boolean;
+}
+
+interface SettingsState {
+  autoSelectSubtitles: boolean;
+  preferredSubtitleLanguages: string[]; // Ordered list of preferred languages
+  setAutoSelectSubtitles: (value: boolean) => void;
+  setPreferredSubtitleLanguages: (languages: string[]) => void;
+  addPreferredLanguage: (language: string) => void;
+  removePreferredLanguage: (language: string) => void;
+}
+
+export const useSettingsStore = create<SettingsState>()(
+  persist(
+    (set, get) => ({
+      autoSelectSubtitles: true,
+      preferredSubtitleLanguages: ['en'], // Default to English
+
+      setAutoSelectSubtitles: (value) => set({ autoSelectSubtitles: value }),
+
+      setPreferredSubtitleLanguages: (languages) =>
+        set({ preferredSubtitleLanguages: languages }),
+
+      addPreferredLanguage: (language) =>
+        set((state) => {
+          if (state.preferredSubtitleLanguages.includes(language)) return state;
+          return {
+            preferredSubtitleLanguages: [...state.preferredSubtitleLanguages, language],
+          };
+        }),
+
+      removePreferredLanguage: (language) =>
+        set((state) => ({
+          preferredSubtitleLanguages: state.preferredSubtitleLanguages.filter(
+            (lang) => lang !== language
+          ),
+        })),
+    }),
+    {
+      name: 'flixnest-settings',
+      storage: createJSONStorage(() => localStorage),
+    }
+  )
+);

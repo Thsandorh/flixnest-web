@@ -24,6 +24,10 @@ body {
   scroll-behavior: smooth;
 }
 
+html {
+  background-color: rgb(var(--background));
+}
+
 body {
   background-color: rgb(var(--background));
   color: rgb(var(--foreground));

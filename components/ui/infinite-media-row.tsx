@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { useInView } from 'react-intersection-observer';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
@@ -26,6 +27,7 @@ export interface MediaItem {
 
 interface InfiniteMediaRowProps {
   title: string;
+  titleHref?: string;
   items?: MediaItem[];
   historyItems?: Array<MediaCardProps & { historyItem?: any }>;
   isLoading?: boolean;
@@ -38,6 +40,7 @@ interface InfiniteMediaRowProps {
 
 export function InfiniteMediaRow({
   title,
+  titleHref,
   items,
   historyItems,
   isLoading = false,

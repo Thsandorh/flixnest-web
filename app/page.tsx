@@ -4,12 +4,13 @@ import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { Play, Info, Plus, Check, Volume2, VolumeX } from 'lucide-react';
+import { Play, Info, Plus, Check } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import axios from 'axios';
 
 import { InfiniteMediaRow } from '@/components/ui/infinite-media-row';
-import { useHistoryStore, useWatchlistStore } from '@/store';
+import { useAddonStore, useHistoryStore, useWatchlistStore } from '@/store';
+import { getCatalogItems, getManifest, type MetaPreview } from '@/lib/stremio';
 
 const TMDB_API_KEY = 'ffe7ef8916c61835264d2df68276ddc2';
 const TMDB_BASE = 'https://api.themoviedb.org/3';
@@ -50,10 +51,39 @@ async function fetchAnime() {
   return data.results;
 }
 
+const ITEMS_PER_CATALOG = 20;
+
+const mapCatalogType = (type: string): 'movie' | 'tv' => {
+  if (type === 'series' || type === 'tv' || type === 'channel') return 'tv';
+  return 'movie';
+};
+
+const extractYear = (releaseInfo?: string): string | undefined => {
+  if (!releaseInfo) return undefined;
+  const match = releaseInfo.match(/\b(19|20)\d{2}\b/);
+  return match ? match[0] : undefined;
+};
+
+const mapCatalogMeta = (meta: MetaPreview) => {
+  const mediaType = mapCatalogType(meta.type);
+  const year = extractYear(meta.releaseInfo);
+  const rating = meta.imdbRating ? Number(meta.imdbRating) : undefined;
+  return {
+    id: meta.imdb_id || meta.imdbId || meta.id,
+    title: meta.name,
+    poster_path: meta.poster,
+    backdrop_path: meta.background,
+    media_type: mediaType,
+    vote_average: rating && Number.isFinite(rating) ? rating : undefined,
+    release_date: mediaType === 'movie' && year ? `${year}-01-01` : undefined,
+    first_air_date: mediaType === 'tv' && year ? `${year}-01-01` : undefined,
+  };
+};
+
 export default function HomePage() {
-  const [isMuted, setIsMuted] = useState(true);
   const { history } = useHistoryStore();
   const { watchlist, isInWatchlist, toggleWatchlist } = useWatchlistStore();
+  const { activeAddons } = useAddonStore();
 
   // Queries
   const { data: trending, isLoading: trendingLoading } = useQuery({
@@ -84,6 +114,48 @@ export default function HomePage() {
     queryKey: ['movies', 'action'],
     queryFn: () => fetchByGenre('movie', 28),
     staleTime: 1000 * 60 * 5,
+  });
+
+  const { data: addonCatalogRows, isLoading: addonCatalogsLoading } = useQuery({
+    queryKey: ['addon-catalogs', activeAddons.map((addon) => addon.manifest).join('|')],
+    queryFn: async () => {
+      const manifestResults = await Promise.allSettled(
+        activeAddons.map(async (addon) => ({
+          addon,
+          manifest: await getManifest(addon.manifest),
+        }))
+      );
+
+      const rows: Array<{
+        key: string;
+        title: string;
+        items: ReturnType<typeof mapCatalogMeta>[];
+        defaultType: 'movie' | 'tv';
+      }> = [];
+
+      for (const result of manifestResults) {
+        if (result.status !== 'fulfilled') continue;
+        const { addon, manifest } = result.value;
+        if (!manifest?.catalogs || manifest.catalogs.length === 0) continue;
+
+        const catalogs = manifest.catalogs;
+        for (const catalog of catalogs) {
+          const items = await getCatalogItems(addon.manifest, catalog.type, catalog.id);
+          if (items.length === 0) continue;
+
+          rows.push({
+            key: `${addon.manifest}:${catalog.type}:${catalog.id}`,
+            title: `${manifest.name} · ${catalog.name || catalog.id}`,
+            items: items.slice(0, ITEMS_PER_CATALOG).map(mapCatalogMeta),
+            defaultType: mapCatalogType(catalog.type),
+          });
+        }
+      }
+
+      return rows;
+    },
+    enabled: activeAddons.length > 0,
+    staleTime: 1000 * 60 * 10,
   });
 
   // Hero item (first trending)
@@ -194,16 +266,6 @@ export default function HomePage() {
                 )}
               </button>
 
-              <button
-                onClick={() => setIsMuted(!isMuted)}
-                className="flex items-center justify-center w-12 h-12 bg-zinc-800/80 rounded-full border border-zinc-500 hover:border-white transition-colors"
-              >
-                {isMuted ? (
-                  <VolumeX className="w-5 h-5 text-white" />
-                ) : (
-                  <Volume2 className="w-5 h-5 text-white" />
-                )}
-              </button>
             </motion.div>
 
             {/* Rating badge */}
@@ -246,6 +308,17 @@ export default function HomePage() {
             variant="default"
           />
         )}
+
+        {/* Addon Catalogs */}
+        {addonCatalogRows?.map((row) => (
+          <InfiniteMediaRow
+            key={row.key}
+            title={row.title}
+            items={row.items}
+            isLoading={addonCatalogsLoading}
+            defaultType={row.defaultType}
+          />
+        ))}
 
         {/* Trending Now */}
         <InfiniteMediaRow

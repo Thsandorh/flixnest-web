@@ -21,11 +21,6 @@ import { getManifest } from '@/lib/stremio';
 
 const POPULAR_ADDONS = [
   {
-    name: 'WebStreamr',
-    manifest: 'https://webstreamr.strem.fun/manifest.json',
-    description: 'High-quality web streams for movies and series',
-  },
-  {
     name: 'Torrentio',
     manifest: 'https://torrentio.strem.fun/manifest.json',
     description: 'Torrent streams from various providers',
@@ -36,9 +31,24 @@ const POPULAR_ADDONS = [
     description: 'Real-Debrid enhanced streams',
   },
   {
+    name: 'USA TV',
+    manifest: 'https://848b3516657c-usatv.baby-beamup.club/manifest.json',
+    description: 'USA TV catalog addon',
+  },
+  {
     name: 'MediaFusion',
     manifest: 'https://mediafusion.elfhosted.com/manifest.json',
     description: 'Multiple stream sources combined',
+  },
+  {
+    name: 'SubMaker',
+    manifest: 'https://submaker.elfhosted.com/addon/e1f195feeb10907f481697054dc902f6/manifest.json',
+    description: 'Subtitle provider',
+  },
+  {
+    name: 'Netflix Catalog',
+    manifest: 'https://7a82163c306e-stremio-netflix-catalog-addon.baby-beamup.club/manifest.json',
+    description: 'Netflix catalog listings',
   },
 ];
 
@@ -78,7 +88,11 @@ export default function AddonsPage() {
       const manifest = await getManifest(urlToAdd);
 
       if (!manifest) {
-        throw new Error('Failed to fetch manifest');
+        throw new Error('Failed to fetch manifest - unable to connect to addon server');
+      }
+
+      if (!manifest.id || !manifest.name || !manifest.version) {
+        throw new Error('Invalid manifest format - missing required fields');
       }
 
       const newAddon: Addon = {
@@ -89,6 +103,7 @@ export default function AddonsPage() {
         description: manifest.description,
         types: manifest.types || [],
         catalogs: manifest.catalogs?.map((c) => c.name),
+        resources: manifest.resources?.map((r) => r.name),
       };
 
       addAddon(newAddon);
@@ -96,7 +111,8 @@ export default function AddonsPage() {
       toast.success(`${manifest.name} added successfully!`);
     } catch (err) {
       console.error('Error adding addon:', err);
-      setError('Failed to add addon. Please check the URL and try again.');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to add addon. Please check the URL and try again.';
+      setError(errorMessage);
       toast.error('Failed to add addon');
     } finally {
       setIsLoading(false);
@@ -130,7 +146,7 @@ export default function AddonsPage() {
           <div>
             <h1 className="text-2xl md:text-3xl font-bold text-white">Addons</h1>
             <p className="text-zinc-400">
-              {activeAddons.length} active addon(s)
+              Manage your streaming sources
             </p>
           </div>
         </div>
@@ -229,7 +245,7 @@ export default function AddonsPage() {
         {/* Installed Addons */}
         <div>
           <h2 className="text-lg font-semibold text-white mb-4">
-            Installed Addons ({addons.length})
+            Installed Addons
           </h2>
 
           <div className="space-y-3">

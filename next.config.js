@@ -7,6 +7,16 @@ const nextConfig = {
         hostname: 'image.tmdb.org',
         pathname: '/t/p/**',
       },
+      {
+        protocol: 'https',
+        hostname: 'images.justwatch.com',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'live.metahub.space',
+        pathname: '/**',
+      },
     ],
     unoptimized: false,
   },

@@ -18,6 +18,7 @@ interface VideoPlayerProps {
   subtitles?: SubtitleTrack[];
   headers?: Record<string, string>;
   startTime?: number;
+  disableProxy?: boolean;
   onProgress?: (currentTime: number, duration: number) => void;
   onEnded?: () => void;
   onPlay?: () => void;
@@ -44,28 +45,81 @@ function isDash(url: string): boolean {
   return false;
 }
 
-function proxyUrl(url: string, headers?: Record<string, string>): string {
+function normalizeStreamUrl(url: string): string {
+  let cleaned = url.trim();
+
+  if (/^vlc:\/\//i.test(cleaned)) {
+    cleaned = cleaned.replace(/^vlc:\/\//i, '');
+  }
+
+  cleaned = cleaned.replace(/^http:\/(?!\/)/i, 'http://');
+  cleaned = cleaned.replace(/^https:\/(?!\/)/i, 'https://');
+  cleaned = cleaned.replace(/^(https?)\/\/(?!\/)/i, '$1://');
+
+  return cleaned;
+}
+
+function getVlcDeepLink(url: string): string {
+  const normalizedUrl = normalizeStreamUrl(url);
+
+  if (typeof navigator === 'undefined') {
+    return `vlc://${normalizedUrl}`;
+  }
+
+  const ua = navigator.userAgent || '';
+  const isIOS = /iPhone|iPad|iPod/i.test(ua);
+  const isAndroid = /Android/i.test(ua);
+
+  if (isIOS) {
+    return `vlc-x-callback://x-callback-url/stream?url=${encodeURIComponent(normalizedUrl)}`;
+  }
+
+  if (isAndroid) {
+    return `intent:${normalizedUrl}#Intent;package=org.videolan.vlc;action=android.intent.action.VIEW;type=video/*;end`;
+  }
+
+  return `vlc:${normalizedUrl}`;
+}
+
+function proxyUrl(
+  url: string,
+  headers?: Record<string, string>,
+  absolute: boolean = true,
+  ext?: string
+): string {
   const referer = headers?.Referer || headers?.referer;
   const ua = headers?.['User-Agent'] || headers?.['user-agent'];
 
-  if (url.startsWith('/api/proxy')) {
-    try {
-      const base = typeof window !== 'undefined' ? window.location.origin : 'http://localhost';
-      const u = new URL(url, base);
+  try {
+    const base = typeof window !== 'undefined' ? window.location.origin : 'http://localhost';
+    const u = new URL(url, base);
+    if (u.pathname === '/api/proxy') {
       if (referer && !u.searchParams.get('referer')) u.searchParams.set('referer', referer);
       if (ua && !u.searchParams.get('ua')) u.searchParams.set('ua', ua);
-      return `${u.pathname}?${u.searchParams.toString()}`;
-    } catch {
-      return url;
+      if (ext && !u.searchParams.get('ext')) u.searchParams.set('ext', ext);
+      const res = `${u.pathname}?${u.searchParams.toString()}`;
+      if (absolute && typeof window !== 'undefined') {
+        const origin = window.location.origin.replace('localhost', '127.0.0.1');
+        return origin + res;
+      }
+      return res;
     }
+  } catch {
+    // fall through
   }
 
   const params = new URLSearchParams();
   params.set('url', url);
   if (referer) params.set('referer', referer);
   if (ua) params.set('ua', ua);
+  if (ext) params.set('ext', ext);
 
-  return `/api/proxy?${params.toString()}`;
+  const res = `/api/proxy?${params.toString()}`;
+  if (absolute && typeof window !== 'undefined') {
+    const origin = window.location.origin.replace('localhost', '127.0.0.1');
+    return origin + res;
+  }
+  return res;
 }
 
 export function VideoPlayer({
@@ -75,6 +129,7 @@ export function VideoPlayer({
   subtitles = [],
   headers,
   startTime = 0,
+  disableProxy = false,
   onProgress,
   onEnded,
   onPlay,
@@ -171,8 +226,78 @@ export function VideoPlayer({
 
   // Open in VLC
   const openInVLC = () => {
-    const vlcUrl = `vlc://${src}`;
-    window.location.href = vlcUrl;
+    window.location.href = getVlcDeepLink(src);
+  };
+
+  const downloadM3U = () => {
+    const normalizedUrl = normalizeStreamUrl(src);
+    const safeTitle = (title || 'stream')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+    const filename = safeTitle ? `${safeTitle}.m3u` : 'stream.m3u';
+
+    const options: string[] = [];
+
+    // Add headers if provided
+    if (headers) {
+      const ua = headers['User-Agent'] || headers['user-agent'];
+      const referer =
+        headers['Referer'] ||
+        headers['referer'] ||
+        headers['Referrer'] ||
+        headers['referrer'];
+      if (ua) options.push(`#EXTVLCOPT:http-user-agent=${ua}`);
+      if (referer) options.push(`#EXTVLCOPT:http-referrer=${referer}`);
+    }
+
+    // Add subtitles using input-slave (works for HTTP URLs in VLC)
+    // Keep only 1 subtitle per language to avoid VLC issues with too many input-slave options
+    console.log('[VideoPlayer M3U] Total subtitles:', subtitles.length);
+    const seenLanguages = new Set<string>();
+    const subtitleOptions: string[] = [];
+    for (const subtitle of subtitles) {
+      console.log('[VideoPlayer M3U] Processing subtitle:', subtitle.srclang, subtitle.src.substring(0, 50));
+      if (seenLanguages.has(subtitle.srclang)) {
+        console.log('[VideoPlayer M3U] Skipping duplicate language:', subtitle.srclang);
+        continue;
+      }
+      seenLanguages.add(subtitle.srclang);
+      subtitleOptions.push(`#EXTVLCOPT:input-slave=${subtitle.src}`);
+    }
+    console.log('[VideoPlayer M3U] Subtitles after language dedup:', subtitleOptions.length);
+    console.log('[VideoPlayer M3U] Unique languages:', Array.from(seenLanguages));
+
+    const content = [
+      '#EXTM3U',
+      ...options,
+      ...subtitleOptions,
+      normalizedUrl,
+      '',
+    ].join('\r\n');
+
+    const blob = new Blob([content], { type: 'audio/x-mpegurl' });
+    const objectUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = objectUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(objectUrl);
+  };
+
+  const handleVlcClick = () => {
+    const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+      navigator.userAgent || ''
+    );
+
+    if (isMobileDevice) {
+      openInVLC();
+      return;
+    }
+
+    downloadM3U();
   };
 
   // Open in external player (for Android)
@@ -200,11 +325,19 @@ export function VideoPlayer({
       destroyHls();
       await destroyShaka();
 
-      let finalUrl = src;
-      // Always proxy remote URLs (http/https) to handle CORS
-      if (/^https?:\/\//i.test(finalUrl)) {
-        finalUrl = proxyUrl(finalUrl, headers);
-      }
+      // Determine if this is an HLS stream and pass the ext parameter
+      const isHlsStream = isHls(src);
+      const ext = isHlsStream ? 'm3u8' : undefined;
+      // Use proxy only if not disabled (USA TV streams work better without proxy)
+      const shouldUseProxy = !disableProxy && /^https?:\/\//i.test(src);
+      const finalUrl = shouldUseProxy ? proxyUrl(src, headers, true, ext) : src;
+
+      console.log('[VideoPlayer] Setting up playback');
+      console.log('[VideoPlayer] Original URL:', src.substring(0, 100));
+      console.log('[VideoPlayer] Final URL:', finalUrl.substring(0, 100));
+      console.log('[VideoPlayer] Is HLS:', isHlsStream);
+      console.log('[VideoPlayer] Using proxy:', shouldUseProxy);
+      console.log('[VideoPlayer] Headers:', headers);
 
       v.pause();
       v.removeAttribute('src');
@@ -270,6 +403,7 @@ export function VideoPlayer({
       if (isHls(finalUrl)) {
         if (!setupHls(finalUrl)) {
           console.warn('[HLS] not supported in this browser');
+          fallbackToNative(finalUrl);
         }
         return;
       }
@@ -356,7 +490,7 @@ export function VideoPlayer({
           {subtitles.map((track, index) => (
             <track
               key={`${track.srclang}-${index}`}
-              src={track.src}
+              src={proxyUrl(track.src)}
               kind="subtitles"
               label={track.label}
               srcLang={track.srclang}
@@ -371,24 +505,22 @@ export function VideoPlayer({
         animate={{ opacity: 1, y: 0 }}
         className="flex flex-wrap gap-3 mt-4"
       >
-        {isMobile && (
-          <>
-            <button
-              onClick={openInVLC}
-              className="flex-1 min-w-[120px] flex items-center justify-center gap-2 px-4 py-3 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-medium transition-colors"
-            >
-              <ExternalLink className="w-5 h-5" />
-              Open in VLC
-            </button>
+        <button
+          onClick={handleVlcClick}
+          className="flex-1 min-w-[120px] flex items-center justify-center gap-2 px-4 py-3 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-medium transition-colors"
+        >
+          <ExternalLink className="w-5 h-5" />
+          Open in VLC
+        </button>
 
-            <button
-              onClick={openInExternalPlayer}
-              className="flex-1 min-w-[120px] flex items-center justify-center gap-2 px-4 py-3 bg-zinc-700 hover:bg-zinc-600 text-white rounded-lg font-medium transition-colors"
-            >
-              <Smartphone className="w-5 h-5" />
-              External Player
-            </button>
-          </>
+        {isMobile && (
+          <button
+            onClick={openInExternalPlayer}
+            className="flex-1 min-w-[120px] flex items-center justify-center gap-2 px-4 py-3 bg-zinc-700 hover:bg-zinc-600 text-white rounded-lg font-medium transition-colors"
+          >
+            <Smartphone className="w-5 h-5" />
+            External Player
+          </button>
         )}
 
         <button
