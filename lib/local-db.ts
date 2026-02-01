@@ -59,7 +59,17 @@ export interface LocalDb {
   history: DbHistoryItem[];
 }
 
-const DB_FILE = path.resolve(process.cwd(), 'data', 'db.json');
+// In serverless environments (Lambda, Vercel), /var/task is read-only
+// Use /tmp for writable storage, otherwise use process.cwd()
+const getDbPath = () => {
+  const isServerless = process.env.LAMBDA_TASK_ROOT || process.env.VERCEL;
+  if (isServerless) {
+    return path.resolve('/tmp', 'data', 'db.json');
+  }
+  return path.resolve(process.cwd(), 'data', 'db.json');
+};
+
+const DB_FILE = getDbPath();
 const EMPTY_DB: LocalDb = {
   users: [],
   addons: [],

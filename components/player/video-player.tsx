@@ -2,7 +2,7 @@
 
 import { useRef, useEffect, useState, useCallback } from 'react';
 import Hls from 'hls.js';
-import { ExternalLink, Smartphone } from 'lucide-react';
+import { ExternalLink, Smartphone, Download } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 interface SubtitleTrack {
@@ -511,6 +511,14 @@ export function VideoPlayer({
         >
           <ExternalLink className="w-5 h-5" />
           Open in VLC
+        </button>
+
+        <button
+          onClick={downloadM3U}
+          className="flex-1 min-w-[120px] flex items-center justify-center gap-2 px-4 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium transition-colors"
+        >
+          <Download className="w-5 h-5" />
+          Download
         </button>
 
         {isMobile && (
