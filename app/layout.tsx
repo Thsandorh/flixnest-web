@@ -4,6 +4,7 @@ import { Toaster } from 'sonner';
 
 import { Navbar } from '@/components/navbar';
 import { MobileNav } from '@/components/mobile-nav';
+import { ServiceWorkerRegister } from '@/components/sw-register';
 import { Providers } from './providers';
 import 'vidstack/player/styles/base.css';
 import 'vidstack/player/styles/default/theme.css';
@@ -71,6 +72,7 @@ export default function RootLayout({
       </head>
       <body className={`${inter.className} bg-zinc-950 text-white antialiased`}>
         <Providers>
+          <ServiceWorkerRegister />
           {/* Desktop Navbar */}
           <Navbar />
 
