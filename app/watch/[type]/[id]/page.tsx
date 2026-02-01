@@ -1185,45 +1185,13 @@ export default function WatchPage() {
               {details.number_of_seasons && <span>{details.number_of_seasons} Seasons</span>}
             </div>
 
-            <p className="text-zinc-300 leading-relaxed mb-8">
+            <p className="text-zinc-300 leading-relaxed mb-6">
               {currentEpisode?.overview || details.overview}
             </p>
 
-            {trailer && (
-              <div className="mb-8">
-                <h2 className="text-lg font-semibold text-white mb-3">Trailer</h2>
-                <div className="relative w-full aspect-video rounded-xl overflow-hidden border border-zinc-800 bg-zinc-900">
-                  <iframe
-                    title={trailer.name || 'Trailer'}
-                    src={`https://www.youtube.com/embed/${trailer.key}?rel=0&modestbranding=1`}
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                    className="absolute inset-0 h-full w-full"
-                  />
-                </div>
-                {trailer.name && (
-                  <p className="text-xs text-zinc-500 mt-2">{trailer.name}</p>
-                )}
-              </div>
-            )}
-
-            {details.genres && (
-              <div className="flex flex-wrap gap-2 mb-8">
-                {details.genres.map((genre: any) => (
-                  <Link
-                    key={genre.id}
-                    href={`/discover/${type}/${genre.id}`}
-                    className="px-3 py-1 bg-zinc-800 hover:bg-zinc-700 rounded-full text-sm text-zinc-300 transition-colors"
-                  >
-                    {genre.name}
-                  </Link>
-                ))}
-              </div>
-            )}
-
-            {/* Episode List for TV */}
+            {/* Episode List for TV - placed above trailer */}
             {type === 'tv' && details.seasons && (
-              <div className="mb-8">
+              <div className="mb-6">
                 <h2 className="text-xl font-bold text-white mb-4">Episodes</h2>
 
                 <div className="mb-4">
@@ -1339,6 +1307,39 @@ export default function WatchPage() {
                 </div>
               </div>
             )}
+
+            {trailer && (
+              <div className="mb-8">
+                <h2 className="text-lg font-semibold text-white mb-3">Trailer</h2>
+                <div className="relative w-full aspect-video rounded-xl overflow-hidden border border-zinc-800 bg-zinc-900">
+                  <iframe
+                    title={trailer.name || 'Trailer'}
+                    src={`https://www.youtube.com/embed/${trailer.key}?rel=0&modestbranding=1`}
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                    className="absolute inset-0 h-full w-full"
+                  />
+                </div>
+                {trailer.name && (
+                  <p className="text-xs text-zinc-500 mt-2">{trailer.name}</p>
+                )}
+              </div>
+            )}
+
+            {details.genres && (
+              <div className="flex flex-wrap gap-2 mb-8">
+                {details.genres.map((genre: any) => (
+                  <Link
+                    key={genre.id}
+                    href={`/discover/${type}/${genre.id}`}
+                    className="px-3 py-1 bg-zinc-800 hover:bg-zinc-700 rounded-full text-sm text-zinc-300 transition-colors"
+                  >
+                    {genre.name}
+                  </Link>
+                ))}
+              </div>
+            )}
+
           </div>
 
           <div className="lg:col-span-1">

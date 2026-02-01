@@ -151,6 +151,25 @@ export function MediaCard({
           </div>
         )}
 
+        {/* Mobile watchlist button - always visible */}
+        <button
+          className={cn(
+            'absolute top-2 right-2 z-20 md:hidden',
+            'w-8 h-8 rounded-full flex items-center justify-center',
+            'shadow-lg backdrop-blur-sm transition-colors',
+            inWatchlist
+              ? 'bg-white text-black'
+              : 'bg-black/60 text-white border border-white/30'
+          )}
+          onClick={handleWatchlistClick}
+        >
+          {inWatchlist ? (
+            <Check className="w-4 h-4" />
+          ) : (
+            <Plus className="w-4 h-4" />
+          )}
+        </button>
+
         {/* Bottom content */}
         <div className="absolute bottom-0 left-0 right-0 p-3 z-10">
           {/* Progress bar */}
