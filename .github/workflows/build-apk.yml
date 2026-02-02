@@ -35,13 +35,27 @@ jobs:
       - name: Create Gradle files
         run: |
           cat > android-app/settings.gradle << 'EOF'
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
           rootProject.name = 'Flixnest'
           include ':app'
           EOF
 
           cat > android-app/build.gradle << 'EOF'
           plugins {
-              id 'com.android.application' version '8.1.0' apply false
+              id 'com.android.application' version '8.2.0' apply false
           }
           EOF
 
@@ -97,7 +111,7 @@ jobs:
           EOF
 
           cat > android-app/gradle/wrapper/gradle-wrapper.properties << 'EOF'
-          distributionUrl=https\://services.gradle.org/distributions/gradle-8.4-bin.zip
+          distributionUrl=https\://services.gradle.org/distributions/gradle-8.2-bin.zip
           EOF
 
       - name: Create Android resources
@@ -296,8 +310,8 @@ jobs:
           KEYSTORE_PASSWORD: flixnest123
         run: |
           cd android-app
-          chmod +x gradlew 2>/dev/null || true
-          gradle wrapper --gradle-version 8.4
+          gradle wrapper --gradle-version 8.2
+          chmod +x gradlew
           ./gradlew assembleRelease --no-daemon --stacktrace
 
       - name: Find and rename APK
