@@ -290,12 +290,8 @@ jobs:
 
       - name: Download app icon
         run: |
-          # Try to download icon, or create a placeholder
-          if ! curl -L "https://flixnest.vercel.app/icon-192.png" -o android-app/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png 2>/dev/null; then
-            if ! curl -L "https://via.placeholder.com/192/DC2626/FFFFFF?text=F" -o android-app/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png 2>/dev/null; then
-              printf '%s' 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFgwJ/lN7GngAAAABJRU5ErkJggg==' | base64 -d > android-app/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
-            fi
-          fi
+          # Use the repo icon to avoid download/corruption issues
+          cp public/icon-192.png android-app/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
 
       - name: Generate Keystore
         run: |
