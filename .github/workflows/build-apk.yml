@@ -200,7 +200,7 @@ jobs:
 
           public class MainActivity extends AppCompatActivity {
               private WebView webView;
-              private static final String URL = "https://flixnest.vercel.app";
+              private static final String URL = "https://flixnest-web.vercel.app/";
 
               @Override
               protected void onCreate(Bundle savedInstanceState) {
@@ -335,14 +335,14 @@ jobs:
           body: |
             ## Flixnest Android App
 
-            Automatikus build a `main` branch-ből.
+            Automated build from the `main` branch.
 
-            ### Telepítés
-            1. Töltsd le az APK fájlt
-            2. Engedélyezd az "Ismeretlen forrásból történő telepítést" a telefonodon
-            3. Telepítsd az APK-t
+            ### Installation
+            1. Download the APK file
+            2. Allow "Install unknown apps" on your device
+            3. Install the APK
 
-            ### Változások
+            ### Changes
             Commit: `${{ github.sha }}`
           files: flixnest-v1.0.${{ github.run_number }}.apk
           draft: false
