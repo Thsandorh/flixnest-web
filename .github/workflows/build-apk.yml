@@ -7,6 +7,9 @@ on:
       - main
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -197,7 +200,7 @@ jobs:
 
           public class MainActivity extends AppCompatActivity {
               private WebView webView;
-              private static final String URL = "https://flixnest.vercel.app";
+              private static final String URL = "https://flixnest-web.vercel.app/";
 
               @Override
               protected void onCreate(Bundle savedInstanceState) {
@@ -290,10 +293,8 @@ jobs:
 
       - name: Download app icon
         run: |
-          # Try to download icon, or create a placeholder
-          curl -L "https://flixnest.vercel.app/icon-192.png" -o android-app/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png 2>/dev/null || \
-          curl -L "https://via.placeholder.com/192/DC2626/FFFFFF?text=F" -o android-app/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png 2>/dev/null || \
-          echo "Using default icon"
+          # Use the repo icon to avoid download/corruption issues
+          cp public/icon-192.png android-app/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
 
       - name: Generate Keystore
         run: |
@@ -334,14 +335,14 @@ jobs:
           body: |
             ## Flixnest Android App
 
-            Automatikus build a `main` branch-ből.
+            Automated build from the `main` branch.
 
-            ### Telepítés
-            1. Töltsd le az APK fájlt
-            2. Engedélyezd az "Ismeretlen forrásból történő telepítést" a telefonodon
-            3. Telepítsd az APK-t
+            ### Installation
+            1. Download the APK file
+            2. Allow "Install unknown apps" on your device
+            3. Install the APK
 
-            ### Változások
+            ### Changes
             Commit: `${{ github.sha }}`
           files: flixnest-v1.0.${{ github.run_number }}.apk
           draft: false
