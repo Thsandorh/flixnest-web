@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 const TRAKT_API = 'https://api.trakt.tv';
 
 export async function POST() {
-  const clientId = process.env.TRAKT_CLIENT_ID;
+  const clientId = process.env.TRAKT_CLIENT_ID ?? process.env.NEXT_PUBLIC_TRAKT_CLIENT_ID;
   if (!clientId) {
     return NextResponse.json(
       { error: 'Missing TRAKT_CLIENT_ID' },
