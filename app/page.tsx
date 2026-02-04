@@ -105,8 +105,13 @@ export default function HomePage() {
       };
 
       if (parsed.addonKey !== addonKey) return null;
+      if (Date.now() - parsed.updatedAt > ADDON_CACHE_TTL) {
+        window.localStorage.removeItem(ADDON_CACHE_KEY);
+        return null;
+      }
       return parsed;
     } catch {
+      window.localStorage.removeItem(ADDON_CACHE_KEY);
       return null;
     }
   }, [addonKey]);
@@ -179,14 +184,18 @@ export default function HomePage() {
       }
 
       if (typeof window !== 'undefined') {
-        window.localStorage.setItem(
-          ADDON_CACHE_KEY,
-          JSON.stringify({
-            addonKey,
-            updatedAt: Date.now(),
-            data: rows,
-          })
-        );
+        try {
+          window.localStorage.setItem(
+            ADDON_CACHE_KEY,
+            JSON.stringify({
+              addonKey,
+              updatedAt: Date.now(),
+              data: rows,
+            })
+          );
+        } catch {
+          // Ignore storage quota errors.
+        }
       }
 
       return rows;
