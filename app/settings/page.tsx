@@ -77,9 +77,9 @@ export default function SettingsPage() {
     <main className="min-h-screen bg-zinc-950 text-white px-4 md:px-12 py-24">
       <div className="max-w-3xl mx-auto space-y-10">
         <div className="space-y-2">
-          <h1 className="text-3xl font-bold">Beállítások</h1>
+          <h1 className="text-3xl font-bold">Settings</h1>
           <p className="text-zinc-400">
-            Itt tudod kezelni a fiók- és szinkronizációs beállításokat.
+            Manage your account and sync preferences.
           </p>
         </div>
 
@@ -87,8 +87,7 @@ export default function SettingsPage() {
           <div>
             <h2 className="text-lg font-semibold">Trakt</h2>
             <p className="text-sm text-zinc-400 mt-1">
-              Kapcsold össze a Trakt fiókod a watchlist és nézési előzmények
-              automatikus szinkronizálásához.
+              Connect Trakt to sync your watchlist and viewing history automatically.
             </p>
           </div>
           <div>
@@ -96,7 +95,7 @@ export default function SettingsPage() {
               href="/trakt"
               className="inline-flex items-center px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 transition"
             >
-              Trakt összekötés megnyitása
+              Open Trakt pairing
             </Link>
           </div>
         </section>
@@ -106,17 +105,17 @@ export default function SettingsPage() {
             <div>
               <h2 className="text-lg font-semibold">Auto-select Subtitles</h2>
               <p className="text-sm text-zinc-400 mt-1">
-                Automatikusan kiválasztja a feliratot a preferált nyelvek alapján.
+                Automatically selects subtitles based on your preferred languages.
               </p>
             </div>
             <button
               onClick={() => setAutoSelectSubtitles(!autoSelectSubtitles)}
-              className={`relative w-14 h-7 rounded-full transition-colors ${
+              className={`relative w-14 h-8 rounded-full transition-colors flex items-center ${
                 autoSelectSubtitles ? 'bg-red-600' : 'bg-zinc-700'
               }`}
             >
               <span
-                className={`absolute top-1 w-5 h-5 bg-white rounded-full transition-transform ${
+                className={`absolute w-6 h-6 bg-white rounded-full transition-transform ${
                   autoSelectSubtitles ? 'translate-x-7' : 'translate-x-1'
                 }`}
               />
@@ -128,7 +127,7 @@ export default function SettingsPage() {
               Preferred Subtitle Languages
             </h3>
             <p className="text-sm text-zinc-400 mb-4">
-              A feliratok sorrendjét itt tudod beállítani.
+              Reorder your subtitle languages by priority.
             </p>
 
             <div className="space-y-2 mb-4">
