@@ -247,7 +247,14 @@ export const useAuthStore = create<AuthState>()(
 
           const data = await response.json();
           if (response.ok) {
-            if (data.addons) useAddonStore.setState({ addons: data.addons, activeAddons: data.addons });
+            if (data.addons) {
+              const mergedAddons = mergeDefaultAddons(data.addons);
+              const activeAddons = filterActiveAddons(
+                mergedAddons,
+                data.addons.length > 0 ? data.addons : mergedAddons
+              );
+              useAddonStore.setState({ addons: mergedAddons, activeAddons });
+            }
             if (data.watchlist) useWatchlistStore.setState({ watchlist: data.watchlist });
             if (data.history) useHistoryStore.setState({ history: data.history });
           }
