@@ -32,13 +32,13 @@ export default function TraktPage() {
     return new Date(expiresAt);
   }, [expiresAt]);
 
-  const readJson = async <T,>(response: Response): Promise<T | null> => {
+  const readJson = async <T,>(response: Response): Promise<{ data: T | null; rawText: string }> => {
     const text = await response.text();
-    if (!text) return null;
+    if (!text) return { data: null, rawText: '' };
     try {
-      return JSON.parse(text) as T;
+      return { data: JSON.parse(text) as T, rawText: text };
     } catch {
-      return null;
+      return { data: null, rawText: text };
     }
   };
 
@@ -48,12 +48,12 @@ export default function TraktPage() {
 
     try {
       const response = await fetch('/api/trakt/device', { method: 'POST' });
-      const data = await readJson<DeviceCodeResponse>(response);
+      const { data, rawText } = await readJson<DeviceCodeResponse>(response);
       if (!response.ok) {
-        throw new Error((data as any)?.error || 'Failed to request Trakt code');
+        throw new Error((data as any)?.error || rawText || 'Failed to request Trakt code');
       }
       if (!data) {
-        throw new Error('Empty response from Trakt device endpoint.');
+        throw new Error(rawText || 'Empty response from Trakt device endpoint.');
       }
       setDeviceCode(data);
       setIsPolling(true);
@@ -72,12 +72,12 @@ export default function TraktPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ refreshToken }),
       });
-      const data = await readJson<TokenResponse>(response);
+      const { data, rawText } = await readJson<TokenResponse>(response);
       if (!response.ok) {
-        throw new Error((data as any)?.error || 'Failed to refresh token');
+        throw new Error((data as any)?.error || rawText || 'Failed to refresh token');
       }
       if (!data) {
-        throw new Error('Empty response from Trakt refresh endpoint.');
+        throw new Error(rawText || 'Empty response from Trakt refresh endpoint.');
       }
       const nextExpiresAt = (data.created_at + data.expires_in) * 1000;
       setTokens({
@@ -103,7 +103,7 @@ export default function TraktPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ deviceCode: deviceCode.device_code }),
         });
-        const data = await readJson<TokenResponse>(response);
+        const { data, rawText } = await readJson<TokenResponse>(response);
 
         if (response.ok && data?.access_token) {
           const nextExpiresAt = (data.created_at + data.expires_in) * 1000;
@@ -117,7 +117,7 @@ export default function TraktPage() {
           return;
         }
 
-        const errorCode = (data as any)?.error;
+        const errorCode = (data as any)?.error || rawText;
         if (errorCode === 'authorization_pending') {
           return;
         }
