@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { motion } from 'framer-motion';
@@ -44,6 +44,7 @@ export function MediaCard({
 }: MediaCardProps) {
   const [isHovered, setIsHovered] = useState(false);
   const [imageError, setImageError] = useState(false);
+  const [cachedPoster, setCachedPoster] = useState<string | null>(null);
 
   const { isInWatchlist, toggleWatchlist } = useWatchlistStore();
   const { getProgressPercentage } = useHistoryStore();
@@ -86,6 +87,75 @@ export function MediaCard({
     : resolveImageUrl(poster, 'w500');
 
   const aspectRatio = variant === 'wide' || variant === 'continue' ? 'aspect-video' : 'aspect-[2/3]';
+  const isTmdbImage = imageUrl.startsWith('https://image.tmdb.org/');
+
+  const cacheKey = useMemo(() => {
+    if (!isTmdbImage) return null;
+    return `flixnest-poster-cache-v1:${imageUrl}`;
+  }, [imageUrl, isTmdbImage]);
+
+  useEffect(() => {
+    if (!cacheKey || typeof window === 'undefined') return;
+
+    const ttlMs = 1000 * 60 * 60 * 24 * 14;
+    const now = Date.now();
+
+    const loadCached = () => {
+      try {
+        const raw = window.localStorage.getItem(cacheKey);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw) as { dataUrl: string; updatedAt: number };
+        if (!parsed.dataUrl || now - parsed.updatedAt > ttlMs) {
+          window.localStorage.removeItem(cacheKey);
+          return null;
+        }
+        return parsed.dataUrl;
+      } catch {
+        return null;
+      }
+    };
+
+    const cached = loadCached();
+    if (cached) {
+      setCachedPoster(cached);
+      return;
+    }
+
+    let isActive = true;
+    const controller = new AbortController();
+
+    const fetchAndCache = async () => {
+      try {
+        const response = await fetch(imageUrl, { signal: controller.signal });
+        if (!response.ok) return;
+        const blob = await response.blob();
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          if (!isActive || typeof reader.result !== 'string') return;
+          const dataUrl = reader.result;
+          setCachedPoster(dataUrl);
+          try {
+            window.localStorage.setItem(
+              cacheKey,
+              JSON.stringify({ dataUrl, updatedAt: Date.now() })
+            );
+          } catch {
+            // Ignore storage quota errors.
+          }
+        };
+        reader.readAsDataURL(blob);
+      } catch {
+        // Ignore network errors; fallback to direct URL.
+      }
+    };
+
+    fetchAndCache();
+
+    return () => {
+      isActive = false;
+      controller.abort();
+    };
+  }, [cacheKey, imageUrl]);
 
   const handleWatchlistClick = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -108,9 +178,10 @@ export function MediaCard({
       >
         {/* Image */}
         <Image
-          src={imageError ? '/placeholder.svg' : imageUrl}
+          src={imageError ? '/placeholder.svg' : cachedPoster || imageUrl}
           alt={title}
           fill
+          unoptimized={imageUrl.startsWith('https://image.tmdb.org/')}
           sizes="(max-width: 768px) 50vw, (max-width: 1200px) 33vw, 20vw"
           className="object-cover transition-transform duration-300 group-hover:scale-105"
           onError={() => setImageError(true)}
