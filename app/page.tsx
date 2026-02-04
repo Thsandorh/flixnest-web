@@ -139,6 +139,7 @@ export default function HomePage() {
       };
 
       if (parsed.addonKey !== addonKey) return null;
+      if (!parsed.data || parsed.data.length === 0) return null;
       if (Date.now() - parsed.updatedAt > ADDON_CACHE_TTL) {
         window.localStorage.removeItem(ADDON_CACHE_KEY);
         return null;
@@ -217,7 +218,7 @@ export default function HomePage() {
         }
       }
 
-      if (typeof window !== 'undefined') {
+      if (typeof window !== 'undefined' && rows.length > 0) {
         try {
           window.localStorage.setItem(
             ADDON_CACHE_KEY,
