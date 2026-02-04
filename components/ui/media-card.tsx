@@ -21,6 +21,7 @@ export interface MediaCardProps {
   type: 'movie' | 'tv';
   rating?: number;
   year?: string;
+  priority?: boolean;
   // For continue watching
   historyItem?: HistoryItem;
   // Display options
@@ -37,6 +38,7 @@ export function MediaCard({
   type,
   rating,
   year,
+  priority = false,
   historyItem,
   variant = 'default',
   showOverlay = true,
@@ -182,6 +184,9 @@ export function MediaCard({
           alt={title}
           fill
           unoptimized={imageUrl.startsWith('https://image.tmdb.org/')}
+          priority={priority}
+          fetchPriority={priority ? 'high' : 'auto'}
+          loading={priority ? 'eager' : 'lazy'}
           sizes="(max-width: 768px) 50vw, (max-width: 1200px) 33vw, 20vw"
           className="object-cover transition-transform duration-300 group-hover:scale-105"
           onError={() => setImageError(true)}
