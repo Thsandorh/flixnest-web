@@ -126,6 +126,7 @@ export default function AnimePage() {
               alt={heroItem.title || heroItem.name}
               fill
               priority
+              unoptimized
               className="object-cover"
             />
             <div className="absolute inset-0 gradient-overlay" />
