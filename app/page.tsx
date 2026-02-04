@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useMemo } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
@@ -14,6 +14,8 @@ import { getCatalogItems, getManifest, type MetaPreview } from '@/lib/stremio';
 
 const TMDB_API_KEY = 'ffe7ef8916c61835264d2df68276ddc2';
 const TMDB_BASE = 'https://api.themoviedb.org/3';
+const ADDON_CACHE_KEY = 'flixnest-addon-catalogs';
+const ADDON_CACHE_TTL = 1000 * 60 * 60;
 
 // Fetch functions
 async function fetchTrending() {
@@ -84,6 +86,30 @@ export default function HomePage() {
   const { history } = useHistoryStore();
   const { watchlist, isInWatchlist, toggleWatchlist } = useWatchlistStore();
   const { activeAddons } = useAddonStore();
+  const addonKey = activeAddons.map((addon) => addon.manifest).join('|');
+
+  const cachedAddonCatalogs = useMemo(() => {
+    if (typeof window === 'undefined' || addonKey.length === 0) return null;
+    try {
+      const raw = window.localStorage.getItem(ADDON_CACHE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as {
+        addonKey: string;
+        updatedAt: number;
+        data: Array<{
+          key: string;
+          title: string;
+          items: ReturnType<typeof mapCatalogMeta>[];
+          defaultType: 'movie' | 'tv';
+        }>;
+      };
+
+      if (parsed.addonKey !== addonKey) return null;
+      return parsed;
+    } catch {
+      return null;
+    }
+  }, [addonKey]);
 
   // Queries
   const { data: trending, isLoading: trendingLoading } = useQuery({
@@ -117,7 +143,7 @@ export default function HomePage() {
   });
 
   const { data: addonCatalogRows, isLoading: addonCatalogsLoading } = useQuery({
-    queryKey: ['addon-catalogs', activeAddons.map((addon) => addon.manifest).join('|')],
+    queryKey: ['addon-catalogs', addonKey],
     queryFn: async () => {
       const manifestResults = await Promise.allSettled(
         activeAddons.map(async (addon) => ({
@@ -152,10 +178,24 @@ export default function HomePage() {
         }
       }
 
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(
+          ADDON_CACHE_KEY,
+          JSON.stringify({
+            addonKey,
+            updatedAt: Date.now(),
+            data: rows,
+          })
+        );
+      }
+
       return rows;
     },
     enabled: activeAddons.length > 0,
-    staleTime: 1000 * 60 * 10,
+    staleTime: ADDON_CACHE_TTL,
+    gcTime: ADDON_CACHE_TTL * 6,
+    initialData: cachedAddonCatalogs?.data,
+    initialDataUpdatedAt: cachedAddonCatalogs?.updatedAt,
   });
 
   // Hero item (first trending)
@@ -206,6 +246,7 @@ export default function HomePage() {
               alt={heroItem.title || heroItem.name}
               fill
               priority
+              unoptimized
               className="object-cover"
             />
             {/* Gradients */}
