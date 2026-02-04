@@ -34,7 +34,6 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  line-height: 1.5;
 }
 
 /* Scrollbar Hide Utility */
@@ -179,6 +178,7 @@ media-player[data-view-type='video'] {
 @media (min-width: 1280px) {
   body {
     font-size: 18px;
+    line-height: 1.5;
   }
 
   button,
@@ -197,27 +197,29 @@ media-player[data-view-type='video'] {
   }
 }
 
-a:focus-visible,
-button:focus-visible,
-input:focus-visible,
-select:focus-visible,
-textarea:focus-visible,
-[role='button']:focus-visible,
-[tabindex]:focus-visible {
-  outline: 3px solid rgb(var(--primary));
-  outline-offset: 4px;
-  border-radius: 0.5rem;
-}
+@media (min-width: 1280px) {
+  a:focus-visible,
+  button:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible,
+  [role='button']:focus-visible,
+  [tabindex]:focus-visible {
+    outline: 3px solid rgb(var(--primary));
+    outline-offset: 4px;
+    border-radius: 0.5rem;
+  }
 
-a:focus,
-button:focus,
-input:focus,
-select:focus,
-textarea:focus,
-[role='button']:focus,
-[tabindex]:focus {
-  outline: 3px solid rgb(var(--primary));
-  outline-offset: 4px;
+  a:focus,
+  button:focus,
+  input:focus,
+  select:focus,
+  textarea:focus,
+  [role='button']:focus,
+  [tabindex]:focus {
+    outline: 3px solid rgb(var(--primary));
+    outline-offset: 4px;
+  }
 }
 
 /* Glassmorphism */
