@@ -195,6 +195,7 @@ export function InfiniteMediaRow({
                 type={item.type}
                 rating={item.rating}
                 year={item.year}
+                priority={index < 4}
                 historyItem={'historyItem' in item ? item.historyItem : undefined}
                 variant={variant}
               />
