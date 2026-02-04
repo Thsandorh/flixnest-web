@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
+import { syncTraktHistoryIfNeeded, syncTraktWatchlist } from '@/lib/trakt';
 
 // Types
 export interface Addon {
@@ -36,6 +37,7 @@ export interface WatchlistItem {
   poster: string;
   backdrop?: string;
   addedAt: number;
+  imdbId?: string;
 }
 
 const SUBMAKER_MANIFEST_HINT = 'submaker.elfhosted.com';
@@ -387,7 +389,7 @@ export const useHistoryStore = create<HistoryState>()(
     (set, get) => ({
       history: [],
 
-      updateProgress: (item) =>
+      updateProgress: (item) => {
         set((state) => {
           const existingIndex = state.history.findIndex((h) => h.id === item.id);
           const newItem: HistoryItem = {
@@ -412,7 +414,25 @@ export const useHistoryStore = create<HistoryState>()(
           return {
             history: [newItem, ...state.history],
           };
-        }),
+        });
+
+        const traktToken = useTraktStore.getState().accessToken;
+        if (traktToken) {
+          const progressPercent =
+            item.duration > 0 ? (item.progress / item.duration) * 100 : 0;
+          void syncTraktHistoryIfNeeded(
+            traktToken,
+            {
+              id: item.id,
+              type: item.type,
+              imdbId: item.imdbId,
+              season: item.season,
+              episode: item.episode,
+            },
+            progressPercent
+          ).catch(() => {});
+        }
+      },
 
       markEpisodeWatched: (id, season, episode) =>
         set((state) => {
@@ -511,8 +531,24 @@ export const useWatchlistStore = create<WatchlistState>()(
         const isIn = get().isInWatchlist(item.id);
         if (isIn) {
           get().removeFromWatchlist(item.id);
+          const traktToken = useTraktStore.getState().accessToken;
+          if (traktToken) {
+            void syncTraktWatchlist(
+              traktToken,
+              { id: item.id, type: item.type, imdbId: item.imdbId },
+              'remove'
+            ).catch(() => {});
+          }
         } else {
           get().addToWatchlist(item);
+          const traktToken = useTraktStore.getState().accessToken;
+          if (traktToken) {
+            void syncTraktWatchlist(
+              traktToken,
+              { id: item.id, type: item.type, imdbId: item.imdbId },
+              'add'
+            ).catch(() => {});
+          }
         }
       },
 
@@ -534,6 +570,44 @@ export interface AppNotification {
   createdAt: number;
   read: boolean;
 }
+
+interface TraktState {
+  accessToken: string | null;
+  refreshToken: string | null;
+  expiresAt: number | null;
+  username: string | null;
+  setTokens: (data: { accessToken: string; refreshToken: string; expiresAt: number; username?: string }) => void;
+  clearTokens: () => void;
+}
+
+export const useTraktStore = create<TraktState>()(
+  persist(
+    (set) => ({
+      accessToken: null,
+      refreshToken: null,
+      expiresAt: null,
+      username: null,
+      setTokens: ({ accessToken, refreshToken, expiresAt, username }) =>
+        set({
+          accessToken,
+          refreshToken,
+          expiresAt,
+          username: username ?? null,
+        }),
+      clearTokens: () =>
+        set({
+          accessToken: null,
+          refreshToken: null,
+          expiresAt: null,
+          username: null,
+        }),
+    }),
+    {
+      name: 'flixnest-trakt',
+      storage: createJSONStorage(() => localStorage),
+    }
+  )
+);
 
 interface NotificationState {
   notifications: AppNotification[];

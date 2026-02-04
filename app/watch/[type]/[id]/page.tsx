@@ -1259,6 +1259,7 @@ export default function WatchPage() {
                               src={`https://image.tmdb.org/t/p/w300${episode.still_path}`}
                               alt={episode.name}
                               fill
+                              unoptimized
                               className="object-cover"
                             />
                           ) : (
