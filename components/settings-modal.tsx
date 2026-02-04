@@ -112,6 +112,20 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
               {/* Content */}
               <div className="p-6 max-h-[70vh] overflow-y-auto">
+                {/* Trakt */}
+                <div className="mb-8">
+                  <h3 className="text-lg font-semibold text-white">Trakt</h3>
+                  <p className="text-sm text-zinc-400 mt-1 mb-3">
+                    Trakt szinkronizáció a watchlisthez és nézési előzményekhez.
+                  </p>
+                  <a
+                    href="/trakt"
+                    className="inline-flex items-center px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-white transition-colors"
+                  >
+                    Trakt beállítások megnyitása
+                  </a>
+                </div>
+
                 {/* Auto-select Subtitles */}
                 <div className="mb-8">
                   <div className="flex items-center justify-between mb-2">
