@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import { Toaster } from 'sonner';
+import { Analytics } from '@vercel/analytics/react';
 
 import { Navbar } from '@/components/navbar';
 import { MobileNav } from '@/components/mobile-nav';
@@ -98,6 +99,7 @@ export default function RootLayout({
             closeButton
             richColors
           />
+          <Analytics />
         </Providers>
       </body>
     </html>

@@ -9,7 +9,7 @@ import { useQuery } from '@tanstack/react-query';
 import axios from 'axios';
 
 import { InfiniteMediaRow } from '@/components/ui/infinite-media-row';
-import { useAddonStore, useHistoryStore, useWatchlistStore } from '@/store';
+import { useAddonStore, useHistoryStore, useTraktStore, useWatchlistStore } from '@/store';
 import { getCatalogItems, getManifest, type MetaPreview } from '@/lib/stremio';
 
 const TMDB_API_KEY = 'ffe7ef8916c61835264d2df68276ddc2';
@@ -53,6 +53,39 @@ async function fetchAnime() {
   return data.results;
 }
 
+async function fetchTmdbById(type: 'movie' | 'tv', id: number) {
+  const { data } = await axios.get(
+    `${TMDB_BASE}/${type}/${id}?api_key=${TMDB_API_KEY}`
+  );
+  return data;
+}
+
+async function fetchTmdbByImdbId(type: 'movie' | 'tv', imdbId: string) {
+  const { data } = await axios.get(
+    `${TMDB_BASE}/find/${imdbId}?api_key=${TMDB_API_KEY}&external_source=imdb_id`
+  );
+  const results = type === 'movie' ? data.movie_results : data.tv_results;
+  return results?.[0] ?? null;
+}
+
+type TraktIds = {
+  trakt?: number;
+  imdb?: string;
+  tmdb?: number;
+  slug?: string;
+};
+
+type TraktCatalogResponse = {
+  watchlist: {
+    movies: Array<{ movie: { ids: TraktIds } }>;
+    shows: Array<{ show: { ids: TraktIds } }>;
+  };
+  history: {
+    movies: Array<{ movie: { ids: TraktIds } }>;
+    shows: Array<{ show: { ids: TraktIds } }>;
+  };
+};
+
 const ITEMS_PER_CATALOG = 20;
 
 const mapCatalogType = (type: string): 'movie' | 'tv' => {
@@ -86,6 +119,7 @@ export default function HomePage() {
   const { history } = useHistoryStore();
   const { watchlist, isInWatchlist, toggleWatchlist } = useWatchlistStore();
   const { activeAddons } = useAddonStore();
+  const { accessToken: traktAccessToken } = useTraktStore();
   const addonKey = activeAddons.map((addon) => addon.manifest).join('|');
 
   const cachedAddonCatalogs = useMemo(() => {
@@ -205,6 +239,89 @@ export default function HomePage() {
     gcTime: ADDON_CACHE_TTL * 6,
     initialData: cachedAddonCatalogs?.data,
     initialDataUpdatedAt: cachedAddonCatalogs?.updatedAt,
+  });
+
+  const { data: traktCatalogRows, isLoading: traktCatalogsLoading } = useQuery({
+    queryKey: ['trakt-catalogs', traktAccessToken],
+    enabled: Boolean(traktAccessToken),
+    queryFn: async () => {
+      if (!traktAccessToken) return [];
+      const response = await fetch('/api/trakt/catalog', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accessToken: traktAccessToken }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch Trakt catalogs');
+      }
+
+      const data = (await response.json()) as TraktCatalogResponse;
+
+      const mapItems = async (
+        items: Array<{ movie?: { ids: TraktIds }; show?: { ids: TraktIds } }>,
+        type: 'movie' | 'tv'
+      ) => {
+        const resolved = await Promise.allSettled(
+          items.slice(0, ITEMS_PER_CATALOG).map(async (item) => {
+            const ids = item.movie?.ids ?? item.show?.ids;
+            if (!ids) return null;
+            if (ids.tmdb) return fetchTmdbById(type, ids.tmdb);
+            if (ids.imdb) return fetchTmdbByImdbId(type, ids.imdb);
+            return null;
+          })
+        );
+        return resolved
+          .filter((result) => result.status === 'fulfilled' && result.value)
+          .map((result) => (result as PromiseFulfilledResult<any>).value);
+      };
+
+      const watchlistMovies = await mapItems(data.watchlist.movies, 'movie');
+      const watchlistShows = await mapItems(data.watchlist.shows, 'tv');
+      const historyMovies = await mapItems(data.history.movies, 'movie');
+      const historyShows = await mapItems(data.history.shows, 'tv');
+
+      const rows: Array<{ key: string; title: string; items: any[]; defaultType: 'movie' | 'tv' }> = [];
+
+      if (watchlistMovies.length > 0) {
+        rows.push({
+          key: 'trakt-watchlist-movies',
+          title: 'Trakt Watchlist · Movies',
+          items: watchlistMovies,
+          defaultType: 'movie',
+        });
+      }
+
+      if (watchlistShows.length > 0) {
+        rows.push({
+          key: 'trakt-watchlist-shows',
+          title: 'Trakt Watchlist · Shows',
+          items: watchlistShows,
+          defaultType: 'tv',
+        });
+      }
+
+      if (historyMovies.length > 0) {
+        rows.push({
+          key: 'trakt-history-movies',
+          title: 'Trakt History · Movies',
+          items: historyMovies,
+          defaultType: 'movie',
+        });
+      }
+
+      if (historyShows.length > 0) {
+        rows.push({
+          key: 'trakt-history-shows',
+          title: 'Trakt History · Shows',
+          items: historyShows,
+          defaultType: 'tv',
+        });
+      }
+
+      return rows;
+    },
+    staleTime: 1000 * 60 * 5,
   });
 
   // Hero item (first trending)
@@ -398,6 +515,17 @@ export default function HomePage() {
           isLoading={actionLoading}
           defaultType="movie"
         />
+
+        {/* Trakt Catalogs */}
+        {traktCatalogRows?.map((row) => (
+          <InfiniteMediaRow
+            key={row.key}
+            title={row.title}
+            items={row.items}
+            isLoading={traktCatalogsLoading}
+            defaultType={row.defaultType}
+          />
+        ))}
 
         {/* Addon Catalogs - Always below TMDB categories */}
         {addonCatalogRows?.map((row) => (
