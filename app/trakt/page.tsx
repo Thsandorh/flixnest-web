@@ -32,15 +32,28 @@ export default function TraktPage() {
     return new Date(expiresAt);
   }, [expiresAt]);
 
+  const readJson = async <T,>(response: Response): Promise<T | null> => {
+    const text = await response.text();
+    if (!text) return null;
+    try {
+      return JSON.parse(text) as T;
+    } catch {
+      return null;
+    }
+  };
+
   const startDeviceFlow = async () => {
     setError(null);
     setDeviceCode(null);
 
     try {
       const response = await fetch('/api/trakt/device', { method: 'POST' });
-      const data = (await response.json()) as DeviceCodeResponse;
+      const data = await readJson<DeviceCodeResponse>(response);
       if (!response.ok) {
-        throw new Error((data as any).error || 'Failed to request Trakt code');
+        throw new Error((data as any)?.error || 'Failed to request Trakt code');
+      }
+      if (!data) {
+        throw new Error('Empty response from Trakt device endpoint.');
       }
       setDeviceCode(data);
       setIsPolling(true);
@@ -59,9 +72,12 @@ export default function TraktPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ refreshToken }),
       });
-      const data = (await response.json()) as TokenResponse;
+      const data = await readJson<TokenResponse>(response);
       if (!response.ok) {
-        throw new Error((data as any).error || 'Failed to refresh token');
+        throw new Error((data as any)?.error || 'Failed to refresh token');
+      }
+      if (!data) {
+        throw new Error('Empty response from Trakt refresh endpoint.');
       }
       const nextExpiresAt = (data.created_at + data.expires_in) * 1000;
       setTokens({
@@ -87,9 +103,9 @@ export default function TraktPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ deviceCode: deviceCode.device_code }),
         });
-        const data = (await response.json()) as TokenResponse;
+        const data = await readJson<TokenResponse>(response);
 
-        if (response.ok && data.access_token) {
+        if (response.ok && data?.access_token) {
           const nextExpiresAt = (data.created_at + data.expires_in) * 1000;
           setTokens({
             accessToken: data.access_token,
@@ -101,7 +117,7 @@ export default function TraktPage() {
           return;
         }
 
-        const errorCode = (data as any).error;
+        const errorCode = (data as any)?.error;
         if (errorCode === 'authorization_pending') {
           return;
         }
