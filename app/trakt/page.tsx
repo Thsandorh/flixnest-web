@@ -32,13 +32,20 @@ export default function TraktPage() {
     return new Date(expiresAt);
   }, [expiresAt]);
 
-  const readJson = async <T,>(response: Response): Promise<{ data: T | null; rawText: string }> => {
+  const readJson = async <T,>(response: Response): Promise<{
+    data: T | null;
+    rawText: string;
+    status: number;
+    statusText: string;
+  }> => {
     const text = await response.text();
-    if (!text) return { data: null, rawText: '' };
+    const status = response.status;
+    const statusText = response.statusText;
+    if (!text) return { data: null, rawText: '', status, statusText };
     try {
-      return { data: JSON.parse(text) as T, rawText: text };
+      return { data: JSON.parse(text) as T, rawText: text, status, statusText };
     } catch {
-      return { data: null, rawText: text };
+      return { data: null, rawText: text, status, statusText };
     }
   };
 
@@ -47,13 +54,20 @@ export default function TraktPage() {
     setDeviceCode(null);
 
     try {
+      if (!process.env.NEXT_PUBLIC_TRAKT_CLIENT_ID) {
+        throw new Error('Missing NEXT_PUBLIC_TRAKT_CLIENT_ID in the environment.');
+      }
       const response = await fetch('/api/trakt/device', { method: 'POST' });
-      const { data, rawText } = await readJson<DeviceCodeResponse>(response);
+      const { data, rawText, status, statusText } = await readJson<DeviceCodeResponse>(response);
       if (!response.ok) {
-        throw new Error((data as any)?.error || rawText || 'Failed to request Trakt code');
+        throw new Error(
+          (data as any)?.error ||
+            rawText ||
+            `Failed to request Trakt code (HTTP ${status} ${statusText})`
+        );
       }
       if (!data) {
-        throw new Error(rawText || 'Empty response from Trakt device endpoint.');
+        throw new Error(rawText || `Empty response from Trakt device endpoint (HTTP ${status}).`);
       }
       setDeviceCode(data);
       setIsPolling(true);
@@ -72,12 +86,16 @@ export default function TraktPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ refreshToken }),
       });
-      const { data, rawText } = await readJson<TokenResponse>(response);
+      const { data, rawText, status, statusText } = await readJson<TokenResponse>(response);
       if (!response.ok) {
-        throw new Error((data as any)?.error || rawText || 'Failed to refresh token');
+        throw new Error(
+          (data as any)?.error ||
+            rawText ||
+            `Failed to refresh token (HTTP ${status} ${statusText})`
+        );
       }
       if (!data) {
-        throw new Error(rawText || 'Empty response from Trakt refresh endpoint.');
+        throw new Error(rawText || `Empty response from Trakt refresh endpoint (HTTP ${status}).`);
       }
       const nextExpiresAt = (data.created_at + data.expires_in) * 1000;
       setTokens({
@@ -103,7 +121,7 @@ export default function TraktPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ deviceCode: deviceCode.device_code }),
         });
-        const { data, rawText } = await readJson<TokenResponse>(response);
+        const { data, rawText, status, statusText } = await readJson<TokenResponse>(response);
 
         if (response.ok && data?.access_token) {
           const nextExpiresAt = (data.created_at + data.expires_in) * 1000;
@@ -117,7 +135,7 @@ export default function TraktPage() {
           return;
         }
 
-        const errorCode = (data as any)?.error || rawText;
+        const errorCode = (data as any)?.error || rawText || `HTTP ${status} ${statusText}`;
         if (errorCode === 'authorization_pending') {
           return;
         }
