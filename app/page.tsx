@@ -206,6 +206,7 @@ export default function HomePage() {
               alt={heroItem.title || heroItem.name}
               fill
               priority
+              unoptimized
               className="object-cover"
             />
             {/* Gradients */}

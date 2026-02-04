@@ -111,6 +111,7 @@ export function MediaCard({
           src={imageError ? '/placeholder.svg' : imageUrl}
           alt={title}
           fill
+          unoptimized={imageUrl.startsWith('https://image.tmdb.org/')}
           sizes="(max-width: 768px) 50vw, (max-width: 1200px) 33vw, 20vw"
           className="object-cover transition-transform duration-300 group-hover:scale-105"
           onError={() => setImageError(true)}
