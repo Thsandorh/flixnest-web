@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Home, Search, Bookmark, Puzzle, Menu, Film, Tv, Sparkles, User, Settings, LogOut, LogIn, X, Tag, ChevronDown } from 'lucide-react';
+import { Home, Search, Bookmark, Puzzle, Menu, Film, Tv, Sparkles, User, Settings, LogOut, LogIn, X, Tag, ChevronDown, Download } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { useAuthStore } from '@/store';
@@ -67,6 +67,14 @@ const moreMenuItems = [
     href: '/anime',
     label: 'Anime',
     icon: Sparkles,
+  },
+];
+
+const downloadItems = [
+  {
+    href: 'https://github.com/Thsandorh/flixnest-web/releases',
+    label: 'Download Android APK',
+    icon: Download,
   },
 ];
 
@@ -208,6 +216,34 @@ export function MobileNav() {
                             isActive
                               ? 'bg-red-600 text-white'
                               : 'bg-zinc-800/50 text-zinc-300 hover:bg-zinc-800'
+                          )}
+                        >
+                          <Icon className="w-5 h-5" />
+                          <span className="font-medium">{item.label}</span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Downloads Section */}
+                <div>
+                  <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3">
+                    Downloads
+                  </p>
+                  <div className="space-y-2">
+                    {downloadItems.map((item) => {
+                      const Icon = item.icon;
+                      return (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          target="_blank"
+                          rel="noreferrer"
+                          onClick={() => setIsMoreMenuOpen(false)}
+                          className={cn(
+                            'flex items-center gap-3 p-3 rounded-lg transition-colors',
+                            'bg-zinc-800/50 text-zinc-300 hover:bg-zinc-800'
                           )}
                         >
                           <Icon className="w-5 h-5" />
