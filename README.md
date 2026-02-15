@@ -76,6 +76,24 @@ npm run build
 npm start
 ```
 
+`npm start` now runs a plain Node.js `server.js` that bootstraps Next.js (instead of `next start`).
+
+## Serving Under a Sub-Path (e.g. `/online`)
+
+If you mount this app behind a reverse proxy under a sub-path like `https://flixnest.app/online`, you must either:
+
+1) Configure the proxy to strip the `/online` prefix before forwarding to Node, or
+2) Build with a Next.js basePath (must be set at build time):
+
+```bash
+# Windows PowerShell
+$env:NEXT_BASE_PATH = "/online"
+npm run build
+npm start
+```
+
+If you change `NEXT_BASE_PATH`, you must rebuild before deploying.
+
 Or deploy to Vercel, Netlify, etc. - standard Next.js deployment.
 
 ## Notes

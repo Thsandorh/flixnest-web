@@ -1,5 +1,12 @@
 /** @type {import('next').NextConfig} */
+// If the app is mounted under a sub-path behind a reverse proxy (e.g. https://domain.tld/online),
+// set NEXT_BASE_PATH=/online at build time and ensure your proxy forwards requests accordingly.
+const basePath = process.env.NEXT_BASE_PATH || '';
+const assetPrefix = basePath ? `${basePath}/` : undefined;
+
 const nextConfig = {
+  basePath,
+  assetPrefix,
   images: {
     remotePatterns: [
       {
