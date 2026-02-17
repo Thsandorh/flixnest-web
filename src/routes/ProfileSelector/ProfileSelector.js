@@ -1,6 +1,7 @@
 // Copyright (C) 2017-2023 Smart code 203358507
 
 const React = require('react');
+const { useTranslation } = require('react-i18next');
 const ProfileCard = require('./ProfileCard');
 const PinModal = require('./PinModal');
 const ProfileModal = require('./ProfileModal');
@@ -16,6 +17,7 @@ const AVATAR_MAP = AVATAR_OPTIONS.reduce((acc, a) => {
 }, {});
 
 const ProfileSelector = () => {
+    const { t } = useTranslation();
     const [profiles, setProfiles] = React.useState([]);
     const [loading, setLoading] = React.useState(true);
     const [error, setError] = React.useState(null);
@@ -237,7 +239,7 @@ const ProfileSelector = () => {
     if (loading) {
         return (
             <div className={styles['profile-selector-container']}>
-                <div className={styles['loading']}>Loading profiles...</div>
+                <div className={styles['loading']}>{t('PROFILE_LOADING')}</div>
             </div>
         );
     }
@@ -246,9 +248,9 @@ const ProfileSelector = () => {
         return (
             <div className={styles['profile-selector-container']}>
                 <div className={styles['error']}>
-                    <h2>Error Loading Profiles</h2>
+                    <h2>{t('PROFILE_ERROR_LOADING')}</h2>
                     <p>{error}</p>
-                    <button onClick={loadProfiles}>Retry</button>
+                    <button onClick={loadProfiles}>{t('RETRY')}</button>
                 </div>
             </div>
         );
@@ -263,8 +265,8 @@ const ProfileSelector = () => {
     return (
         <div className={styles['profile-selector-container']}>
             <div className={styles['header']}>
-                <h1>Who&apos;s watching?</h1>
-                <p>Select your profile to continue</p>
+                <h1>{t('PROFILE_WHOS_WATCHING')}</h1>
+                <p>{t('PROFILE_SELECT_CONTINUE')}</p>
             </div>
 
             <div className={styles['profile-grid']}>
@@ -291,7 +293,7 @@ const ProfileSelector = () => {
                     }}
                 >
                     <div className={styles['add-icon']}>+</div>
-                    <div className={styles['add-text']}>Add Profile</div>
+                    <div className={styles['add-text']}>{t('PROFILE_ADD')}</div>
                 </div>
             </div>
 

@@ -93,9 +93,9 @@ const NavMenuContent = ({ onClick }) => {
             {
                 profile.auth !== null ?
                     <div className={styles['nav-menu-section']}>
-                        <Button className={styles['nav-menu-option-container']} title={'Switch Profile'} onClick={switchProfileOnClick}>
+                        <Button className={styles['nav-menu-option-container']} title={t('PROFILE_SWITCH')} onClick={switchProfileOnClick}>
                             <Icon className={styles['icon']} name={'person'} />
-                            <div className={styles['nav-menu-option-label']}>Switch Profile</div>
+                            <div className={styles['nav-menu-option-label']}>{t('PROFILE_SWITCH')}</div>
                         </Button>
                     </div>
                     :
