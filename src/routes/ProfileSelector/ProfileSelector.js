@@ -257,7 +257,7 @@ const ProfileSelector = () => {
     }
 
     // Enrich profiles with avatar data
-    const enrichedProfiles = profiles.map(p => ({
+    const enrichedProfiles = profiles.map((p) => ({
         ...p,
         avatarData: AVATAR_MAP[p.avatar] || null
     }));

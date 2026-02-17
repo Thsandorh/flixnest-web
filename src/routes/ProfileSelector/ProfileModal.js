@@ -205,7 +205,7 @@ const ProfileModal = ({ profile, onSave, onDelete, onClose }) => {
 
     return (
         <div style={modalStyles.overlay} onClick={onClose}>
-            <div style={modalStyles.modal} onClick={e => e.stopPropagation()}>
+            <div style={modalStyles.modal} onClick={(e) => e.stopPropagation()}>
                 <div style={modalStyles.header}>
                     <h2 style={modalStyles.title}>
                         {isEditing ? 'Edit Profile' : 'Add Profile'}
@@ -217,7 +217,7 @@ const ProfileModal = ({ profile, onSave, onDelete, onClose }) => {
                 <div style={modalStyles.fieldGroup}>
                     <label style={modalStyles.label}>{t('PROFILE_AVATAR_LABEL')}</label>
                     <div style={modalStyles.avatarGrid}>
-                        {AVATAR_OPTIONS.map(avatar => (
+                        {AVATAR_OPTIONS.map((avatar) => (
                             <div
                                 key={avatar.id}
                                 style={{
@@ -246,7 +246,7 @@ const ProfileModal = ({ profile, onSave, onDelete, onClose }) => {
                         style={modalStyles.input}
                         type="text"
                         value={name}
-                        onChange={e => setName(e.target.value)}
+                        onChange={(e) => setName(e.target.value)}
                         placeholder="e.g. Sanyi"
                         autoFocus
                     />
@@ -261,7 +261,7 @@ const ProfileModal = ({ profile, onSave, onDelete, onClose }) => {
                         style={modalStyles.input}
                         type="email"
                         value={email}
-                        onChange={e => setEmail(e.target.value)}
+                        onChange={(e) => setEmail(e.target.value)}
                         placeholder="your@email.com"
                     />
                 </div>
@@ -275,7 +275,7 @@ const ProfileModal = ({ profile, onSave, onDelete, onClose }) => {
                         style={modalStyles.input}
                         type="password"
                         value={password}
-                        onChange={e => setPassword(e.target.value)}
+                        onChange={(e) => setPassword(e.target.value)}
                         placeholder={isEditing ? '••••••••' : 'Enter Stremio password'}
                     />
                 </div>
@@ -289,7 +289,7 @@ const ProfileModal = ({ profile, onSave, onDelete, onClose }) => {
                         inputMode="numeric"
                         maxLength={4}
                         value={pin}
-                        onChange={e => {
+                        onChange={(e) => {
                             const val = e.target.value.replace(/\D/g, '').slice(0, 4);
                             setPin(val);
                         }}
