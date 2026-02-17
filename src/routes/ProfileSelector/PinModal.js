@@ -2,9 +2,11 @@
 
 const React = require('react');
 const PropTypes = require('prop-types');
+const { useTranslation } = require('react-i18next');
 const styles = require('./styles');
 
 const PinModal = ({ profileName, onSubmit, onCancel }) => {
+    const { t } = useTranslation();
     const [pin, setPin] = React.useState(['', '', '', '']);
     const [error, setError] = React.useState('');
     const [shaking, setShaking] = React.useState(false);
@@ -90,8 +92,8 @@ const PinModal = ({ profileName, onSubmit, onCancel }) => {
         <div className={styles['pin-modal-overlay']} onClick={onCancel}>
             <div className={styles['pin-modal']} onClick={(e) => e.stopPropagation()}>
                 <div className={styles['modal-header']}>
-                    <h2>Enter PIN</h2>
-                    <p>Profile: {profileName}</p>
+                    <h2>{t('PROFILE_ENTER_PIN')}</h2>
+                    <p>{t('PROFILE_LABEL')}: {profileName}</p>
                 </div>
 
                 <div className={styles['pin-input-container']}>
@@ -116,7 +118,7 @@ const PinModal = ({ profileName, onSubmit, onCancel }) => {
 
                 <div className={styles['modal-actions']}>
                     <button className={styles['cancel-btn']} onClick={onCancel} disabled={submitting}>
-                        Cancel
+                        {t('BUTTON_CANCEL')}
                     </button>
                     <button
                         className={styles['submit-btn']}

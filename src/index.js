@@ -16,10 +16,11 @@ const ReactDOM = require('react-dom/client');
 const i18n = require('i18next');
 const { initReactI18next } = require('react-i18next');
 const stremioTranslations = require('stremio-translations');
+const profileSwitcherKeys = require('./i18n/profileSwitcher.json');
 const App = require('./App');
 
 const translations = Object.fromEntries(Object.entries(stremioTranslations()).map(([key, value]) => [key, {
-    translation: value
+    translation: { ...value, ...profileSwitcherKeys }
 }]));
 
 i18n

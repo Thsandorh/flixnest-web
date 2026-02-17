@@ -2,6 +2,7 @@
 
 const React = require('react');
 const PropTypes = require('prop-types');
+const { useTranslation } = require('react-i18next');
 
 // Available avatar options (emoji-based)
 const AVATAR_OPTIONS = [
@@ -141,6 +142,7 @@ const modalStyles = {
 };
 
 const ProfileModal = ({ profile, onSave, onDelete, onClose }) => {
+    const { t } = useTranslation();
     const isEditing = !!profile;
 
     const [name, setName] = React.useState(profile?.name || '');
@@ -213,7 +215,7 @@ const ProfileModal = ({ profile, onSave, onDelete, onClose }) => {
 
                 {/* Avatar selector */}
                 <div style={modalStyles.fieldGroup}>
-                    <label style={modalStyles.label}>Avatar</label>
+                    <label style={modalStyles.label}>{t('PROFILE_AVATAR_LABEL')}</label>
                     <div style={modalStyles.avatarGrid}>
                         {AVATAR_OPTIONS.map(avatar => (
                             <div
@@ -239,7 +241,7 @@ const ProfileModal = ({ profile, onSave, onDelete, onClose }) => {
 
                 {/* Name */}
                 <div style={modalStyles.fieldGroup}>
-                    <label style={modalStyles.label}>Name</label>
+                    <label style={modalStyles.label}>{t('PROFILE_NAME_LABEL')}</label>
                     <input
                         style={modalStyles.input}
                         type="text"
@@ -253,7 +255,7 @@ const ProfileModal = ({ profile, onSave, onDelete, onClose }) => {
                 {/* Email */}
                 <div style={modalStyles.fieldGroup}>
                     <label style={modalStyles.label}>
-                        Stremio Email {isEditing ? '(leave empty to keep current)' : ''}
+                        {t('PROFILE_EMAIL_LABEL')}{isEditing ? ' (leave empty to keep current)' : ''}
                     </label>
                     <input
                         style={modalStyles.input}
@@ -267,7 +269,7 @@ const ProfileModal = ({ profile, onSave, onDelete, onClose }) => {
                 {/* Password */}
                 <div style={modalStyles.fieldGroup}>
                     <label style={modalStyles.label}>
-                        Stremio Password {isEditing ? '(leave empty to keep current)' : ''}
+                        {t('PROFILE_PASSWORD_LABEL')}{isEditing ? ' (leave empty to keep current)' : ''}
                     </label>
                     <input
                         style={modalStyles.input}
@@ -280,7 +282,7 @@ const ProfileModal = ({ profile, onSave, onDelete, onClose }) => {
 
                 {/* PIN (optional) */}
                 <div style={modalStyles.fieldGroup}>
-                    <label style={modalStyles.label}>PIN (optional, 4 digits)</label>
+                    <label style={modalStyles.label}>{t('PROFILE_PIN_LABEL')}</label>
                     <input
                         style={modalStyles.input}
                         type="text"
@@ -304,7 +306,7 @@ const ProfileModal = ({ profile, onSave, onDelete, onClose }) => {
                             onClick={handleDelete}
                             disabled={loading}
                         >
-                            Delete
+                            {t('PROFILE_DELETE')}
                         </button>
                     )}
                     <button
@@ -312,7 +314,7 @@ const ProfileModal = ({ profile, onSave, onDelete, onClose }) => {
                         onClick={onClose}
                         disabled={loading}
                     >
-                        Cancel
+                        {t('BUTTON_CANCEL')}
                     </button>
                     <button
                         style={modalStyles.submitBtn}

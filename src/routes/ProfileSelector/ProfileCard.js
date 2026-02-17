@@ -2,9 +2,11 @@
 
 const React = require('react');
 const PropTypes = require('prop-types');
+const { useTranslation } = require('react-i18next');
 const styles = require('./styles');
 
 const ProfileCard = ({ profile, onClick }) => {
+    const { t } = useTranslation();
     const getInitials = (name) => {
         return name
             .split(' ')
@@ -38,7 +40,7 @@ const ProfileCard = ({ profile, onClick }) => {
                 )}
             </div>
             <div className={styles['name']}>{profile.name}</div>
-            {profile.hasPin && <div className={styles['pin-indicator']}>Protected</div>}
+            {profile.hasPin && <div className={styles['pin-indicator']}>{t('PROFILE_PROTECTED')}</div>}
         </div>
     );
 };
