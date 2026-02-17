@@ -100,6 +100,73 @@ router.post('/switch', async (req, res) => {
 });
 
 /**
+ * POST /api/auth/refresh
+ * Re-authenticate with stored credentials to get a fresh authKey (no PIN required)
+ * Intended for auto-renewal when a stored authKey has expired.
+ * Body: { profileId }
+ */
+router.post('/refresh', async (req, res) => {
+    try {
+        const { profileId } = req.body;
+
+        if (!profileId) {
+            return res.status(400).json({ error: 'Profile ID is required' });
+        }
+
+        const profiles = await loadProfiles();
+        const profile = profiles.find(p => p.id === profileId);
+
+        if (!profile) {
+            return res.status(404).json({ error: 'Profile not found' });
+        }
+
+        // Decrypt password
+        let password;
+        try {
+            password = decrypt(profile.encryptedPassword, process.env.ENCRYPTION_KEY);
+        } catch (error) {
+            console.error('Error decrypting password:', error);
+            return res.status(500).json({ error: 'Failed to decrypt password. Check ENCRYPTION_KEY.' });
+        }
+
+        // Re-login to Stremio API
+        try {
+            const response = await fetch(`${STREMIO_API_URL}/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: profile.email, password })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                console.error('Stremio API error during refresh:', errorData);
+                return res.status(response.status).json({
+                    error: errorData.error || 'Stremio login failed during refresh'
+                });
+            }
+
+            const data = await response.json();
+
+            res.json({
+                authKey: data.authKey,
+                user: data.user,
+                profile: {
+                    id: profile.id,
+                    name: profile.name,
+                    avatar: profile.avatar
+                }
+            });
+        } catch (error) {
+            console.error('Error calling Stremio API during refresh:', error);
+            res.status(500).json({ error: 'Failed to connect to Stremio API' });
+        }
+    } catch (error) {
+        console.error('Error refreshing authKey:', error);
+        res.status(500).json({ error: 'Failed to refresh authKey' });
+    }
+});
+
+/**
  * POST /api/auth/verify-pin
  * Verify PIN for a profile without logging in
  * Body: { profileId, pin }

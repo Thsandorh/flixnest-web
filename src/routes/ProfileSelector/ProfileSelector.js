@@ -28,10 +28,51 @@ const ProfileSelector = () => {
     const [showProfileModal, setShowProfileModal] = React.useState(false);
     const [editingProfile, setEditingProfile] = React.useState(null);
 
-    // Load profiles on mount
+    // Load profiles on mount + auto-refresh authKey if a profile is already active
     React.useEffect(() => {
+        checkAndRefreshAuth();
         loadProfiles();
     }, []);
+
+    /**
+     * If there is an already-active profile in localStorage, silently re-authenticate
+     * to get a fresh authKey and redirect to the app without showing the selector.
+     */
+    const checkAndRefreshAuth = async () => {
+        try {
+            const stored = localStorage.getItem('profile');
+            if (!stored) return;
+
+            const parsed = JSON.parse(stored);
+            const profileId = parsed?.profileInfo?.id;
+            if (!profileId) return;
+
+            const response = await fetch(`${API_BASE}/api/auth/refresh`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ profileId })
+            });
+
+            if (!response.ok) {
+                // Cannot refresh (credentials may have changed) — let the user pick again
+                localStorage.removeItem('profile');
+                return;
+            }
+
+            const data = await response.json();
+
+            localStorage.setItem('profile', JSON.stringify({
+                auth: { key: data.authKey, user: data.user },
+                profileInfo: data.profile
+            }));
+
+            // Navigate to main app with fresh authKey
+            window.location.href = '/';
+        } catch (err) {
+            // Non-critical: just show the profile selector normally
+            console.warn('Auto-refresh failed:', err);
+        }
+    };
 
     const loadProfiles = async () => {
         try {
@@ -66,22 +107,18 @@ const ProfileSelector = () => {
 
     const handlePinSubmit = async (pin) => {
         if (selectedProfile) {
-            try {
-                // Verify PIN first
-                const verifyRes = await fetch(`${API_BASE}/api/auth/verify-pin`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ profileId: selectedProfile.id, pin })
-                });
+            // Verify PIN first — throws on failure so PinModal can show inline error
+            const verifyRes = await fetch(`${API_BASE}/api/auth/verify-pin`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ profileId: selectedProfile.id, pin })
+            });
 
-                if (!verifyRes.ok) {
-                    throw new Error('Invalid PIN');
-                }
-
-                await switchProfile(selectedProfile.id, pin);
-            } catch (err) {
-                alert(`Invalid PIN. Please try again.`);
+            if (!verifyRes.ok) {
+                throw new Error('Incorrect PIN. Please try again.');
             }
+
+            await switchProfile(selectedProfile.id, pin);
         }
     };
 

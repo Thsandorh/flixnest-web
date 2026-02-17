@@ -7,6 +7,8 @@ const styles = require('./styles');
 const PinModal = ({ profileName, onSubmit, onCancel }) => {
     const [pin, setPin] = React.useState(['', '', '', '']);
     const [error, setError] = React.useState('');
+    const [shaking, setShaking] = React.useState(false);
+    const [submitting, setSubmitting] = React.useState(false);
     const inputRefs = React.useRef([]);
 
     React.useEffect(() => {
@@ -40,13 +42,32 @@ const PinModal = ({ profileName, onSubmit, onCancel }) => {
         }
     };
 
-    const handleSubmit = () => {
+    const triggerShake = () => {
+        setShaking(true);
+        setTimeout(() => setShaking(false), 400);
+    };
+
+    const handleSubmit = async () => {
         const pinValue = pin.join('');
         if (pinValue.length !== 4) {
             setError('Please enter 4 digits');
+            triggerShake();
             return;
         }
-        onSubmit(pinValue);
+
+        setSubmitting(true);
+        setError('');
+        try {
+            await onSubmit(pinValue);
+        } catch (err) {
+            // Show error inline and reset inputs for a new attempt
+            setError(err.message || 'Incorrect PIN. Please try again.');
+            setPin(['', '', '', '']);
+            triggerShake();
+            setTimeout(() => inputRefs.current[0]?.focus(), 50);
+        } finally {
+            setSubmitting(false);
+        }
     };
 
     const handlePaste = (e) => {
@@ -85,7 +106,8 @@ const PinModal = ({ profileName, onSubmit, onCancel }) => {
                             onChange={(e) => handleChange(index, e.target.value)}
                             onKeyDown={(e) => handleKeyDown(index, e)}
                             onPaste={index === 0 ? handlePaste : undefined}
-                            className={error ? styles['error'] : ''}
+                            className={shaking ? styles['error'] : ''}
+                            disabled={submitting}
                         />
                     ))}
                 </div>
@@ -93,15 +115,15 @@ const PinModal = ({ profileName, onSubmit, onCancel }) => {
                 {error && <div className={styles['error-message']}>{error}</div>}
 
                 <div className={styles['modal-actions']}>
-                    <button className={styles['cancel-btn']} onClick={onCancel}>
+                    <button className={styles['cancel-btn']} onClick={onCancel} disabled={submitting}>
                         Cancel
                     </button>
                     <button
                         className={styles['submit-btn']}
                         onClick={handleSubmit}
-                        disabled={pin.join('').length !== 4}
+                        disabled={pin.join('').length !== 4 || submitting}
                     >
-                        Submit
+                        {submitting ? 'Checking...' : 'Submit'}
                     </button>
                 </div>
             </div>
