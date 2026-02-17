@@ -41,10 +41,10 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Download Gradle wrapper JAR
-        run: |
-          curl -fL -o android/gradle/wrapper/gradle-wrapper.jar \
-            "https://github.com/gradle/gradle/raw/refs/tags/v8.7.0/gradle/wrapper/gradle-wrapper.jar"
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.7'
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -84,9 +84,7 @@ jobs:
 
       - name: Build APKs
         working-directory: android
-        run: |
-          chmod +x gradlew
-          ./gradlew assembleMobileRelease assembleTvRelease
+        run: gradle assembleMobileRelease assembleTvRelease
 
       - name: Rename APKs
         run: |
