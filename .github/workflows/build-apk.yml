@@ -65,8 +65,12 @@ jobs:
       - name: Update Android version
         run: |
           VERSION="${{ steps.version.outputs.version }}"
+          # Only compute a numeric versionCode from semver strings (e.g. 1.2.3 → 123)
+          # Fall back to 1 for non-numeric values like "dev"
           VERSION_CODE=$(echo "$VERSION" | tr -d '.' | sed 's/^0*//')
-          VERSION_CODE=${VERSION_CODE:-1}
+          if ! [[ "$VERSION_CODE" =~ ^[0-9]+$ ]]; then
+            VERSION_CODE=1
+          fi
 
           sed -i "s/versionCode 1/versionCode $VERSION_CODE/" android/app/build.gradle
           sed -i "s/versionName \"1.0.0\"/versionName \"$VERSION\"/" android/app/build.gradle
