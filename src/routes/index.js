@@ -11,6 +11,7 @@ const Search = require('./Search');
 const { default: Settings } = require('./Settings');
 const Player = require('./Player');
 const Intro = require('./Intro');
+const ProfileSelector = require('./ProfileSelector');
 
 module.exports = {
     Addons,
@@ -23,5 +24,6 @@ module.exports = {
     Search,
     Settings,
     Player,
-    Intro
+    Intro,
+    ProfileSelector
 };

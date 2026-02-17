@@ -1,0 +1,56 @@
+// Copyright (C) 2017-2023 Smart code 203358507
+
+const React = require('react');
+const PropTypes = require('prop-types');
+const styles = require('./styles');
+
+const ProfileCard = ({ profile, onClick }) => {
+    const getInitials = (name) => {
+        return name
+            .split(' ')
+            .map(word => word[0])
+            .join('')
+            .toUpperCase()
+            .slice(0, 2);
+    };
+
+    const handleKeyDown = (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onClick(profile);
+        }
+    };
+
+    return (
+        <div
+            className={styles['profile-card']}
+            onClick={() => onClick(profile)}
+            onKeyDown={handleKeyDown}
+            tabIndex={0}
+            role="button"
+            aria-label={`Select profile ${profile.name}`}
+        >
+            <div className={styles['avatar']}>
+                {profile.avatar && profile.avatar.startsWith('http') ? (
+                    <img src={profile.avatar} alt={profile.name} />
+                ) : (
+                    getInitials(profile.name)
+                )}
+            </div>
+            <div className={styles['name']}>{profile.name}</div>
+            {profile.hasPin && <div className={styles['pin-indicator']}>Protected</div>}
+        </div>
+    );
+};
+
+ProfileCard.propTypes = {
+    profile: PropTypes.shape({
+        id: PropTypes.string.isRequired,
+        name: PropTypes.string.isRequired,
+        avatar: PropTypes.string,
+        hasPin: PropTypes.bool
+    }).isRequired,
+    onClick: PropTypes.func.isRequired
+};
+
+module.exports = ProfileCard;

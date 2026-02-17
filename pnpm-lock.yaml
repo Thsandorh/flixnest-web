@@ -38,9 +38,15 @@ importers:
       classnames:
         specifier: 2.5.1
         version: 2.5.1
+      dotenv:
+        specifier: ^16.6.1
+        version: 16.6.1
       eventemitter3:
         specifier: 5.0.1
         version: 5.0.1
+      express:
+        specifier: ^4.21.2
+        version: 4.21.2
       fast-equals:
         specifier: ^6.0.0
         version: 6.0.0
@@ -2046,6 +2052,10 @@ packages:
   dot-case@3.0.4:
     resolution: {integrity: sha512-Kv5nKlh6yRrdrGvxeJ2e5y2eRUpkUosIW4A2AS38zwSz27zu7ufDwQPi5Jhs3XAlGNetl3bmnGhQsMtkKJnj3w==}
 
+  dotenv@16.6.1:
+    resolution: {integrity: sha512-uBq4egWHTcTt33a72vpSG0z3HnPuIl6NqYcTrKEg2azoEyl2hpW0zqlxysq2pK9HlDIHyHyakeYaYnSAwd8bow==}
+    engines: {node: '>=12'}
+
   dunder-proto@1.0.1:
     resolution: {integrity: sha512-KIN/nDJBQRcXw0MLVhZE9iQHmG68qAVIBg9CqmUYjmQIhgij9U5MFvrqkUL5FbtyyzZuOeOt0zdeRe4UY7ct+A==}
     engines: {node: '>= 0.4'}
@@ -2495,7 +2505,7 @@ packages:
     hasBin: true
 
   hls.js@https://github.com/Stremio/hls.js/releases/download/v1.5.4-patch2/hls.js-1.5.4-patch2.tgz:
-    resolution: {tarball: https://github.com/Stremio/hls.js/releases/download/v1.5.4-patch2/hls.js-1.5.4-patch2.tgz}
+    resolution: {integrity: sha512-PvVzZI5Nd2X5ol4R+DVwfpjJtAJ4xKaEzDfIZObfzmWPOop94javQltDt9H92uQUiLIKjFm06Ngpjz0NEudL2Q==, tarball: https://github.com/Stremio/hls.js/releases/download/v1.5.4-patch2/hls.js-1.5.4-patch2.tgz}
     version: 1.5.5-0.canary.9893
 
   hpack.js@2.1.6:
@@ -7005,6 +7015,8 @@ snapshots:
     dependencies:
       no-case: 3.0.4
       tslib: 2.8.1
+
+  dotenv@16.6.1: {}
 
   dunder-proto@1.0.1:
     dependencies:

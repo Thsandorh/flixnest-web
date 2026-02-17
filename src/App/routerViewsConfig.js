@@ -6,6 +6,12 @@ const { routesRegexp } = require('stremio/common');
 const routerViewsConfig = [
     [
         {
+            ...routesRegexp.profileSelector,
+            component: routes.ProfileSelector
+        }
+    ],
+    [
+        {
             ...routesRegexp.board,
             component: routes.Board
         }
