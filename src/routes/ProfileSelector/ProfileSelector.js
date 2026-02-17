@@ -3,16 +3,30 @@
 const React = require('react');
 const ProfileCard = require('./ProfileCard');
 const PinModal = require('./PinModal');
+const ProfileModal = require('./ProfileModal');
+const { AVATAR_OPTIONS } = require('./ProfileModal');
 const styles = require('./styles');
 
 const API_BASE = typeof window !== 'undefined' && window.location.origin;
+
+// Map avatar id → emoji for display
+const AVATAR_MAP = AVATAR_OPTIONS.reduce((acc, a) => {
+    acc[a.id] = a;
+    return acc;
+}, {});
 
 const ProfileSelector = () => {
     const [profiles, setProfiles] = React.useState([]);
     const [loading, setLoading] = React.useState(true);
     const [error, setError] = React.useState(null);
+
+    // Profile switching
     const [selectedProfile, setSelectedProfile] = React.useState(null);
     const [showPinModal, setShowPinModal] = React.useState(false);
+
+    // Profile management
+    const [showProfileModal, setShowProfileModal] = React.useState(false);
+    const [editingProfile, setEditingProfile] = React.useState(null);
 
     // Load profiles on mount
     React.useEffect(() => {
@@ -39,6 +53,8 @@ const ProfileSelector = () => {
         }
     };
 
+    // ---- Profile switching ----
+
     const handleProfileClick = (profile) => {
         if (profile.hasPin) {
             setSelectedProfile(profile);
@@ -48,9 +64,24 @@ const ProfileSelector = () => {
         }
     };
 
-    const handlePinSubmit = (pin) => {
+    const handlePinSubmit = async (pin) => {
         if (selectedProfile) {
-            switchProfile(selectedProfile.id, pin);
+            try {
+                // Verify PIN first
+                const verifyRes = await fetch(`${API_BASE}/api/auth/verify-pin`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ profileId: selectedProfile.id, pin })
+                });
+
+                if (!verifyRes.ok) {
+                    throw new Error('Invalid PIN');
+                }
+
+                await switchProfile(selectedProfile.id, pin);
+            } catch (err) {
+                alert(`Invalid PIN. Please try again.`);
+            }
         }
     };
 
@@ -76,7 +107,7 @@ const ProfileSelector = () => {
 
             const data = await response.json();
 
-            // Store auth data in localStorage
+            // Store auth data in localStorage for Stremio core to pick up
             localStorage.setItem('profile', JSON.stringify({
                 auth: {
                     key: data.authKey,
@@ -89,30 +120,82 @@ const ProfileSelector = () => {
             setShowPinModal(false);
             setSelectedProfile(null);
 
-            // Reload the page to initialize Stremio with the new profile
+            // Reload the page so Stremio core initializes with the new authKey
             window.location.reload();
         } catch (err) {
             console.error('Error switching profile:', err);
-            if (err.message.includes('PIN')) {
-                // Invalid PIN - shake the input
-                alert('Invalid PIN. Please try again.');
-            } else {
-                alert(`Failed to switch profile: ${err.message}`);
-            }
+            alert(`Failed to switch profile: ${err.message}`);
             setShowPinModal(false);
             setSelectedProfile(null);
         }
     };
 
+    // ---- Profile management (Phase 4) ----
+
     const handleAddProfile = () => {
-        // TODO: Open add profile modal
-        alert('Add profile functionality will be implemented in Phase 4');
+        setEditingProfile(null);
+        setShowProfileModal(true);
     };
 
-    const handleManageProfiles = () => {
-        // TODO: Open profile management UI
-        alert('Manage profiles functionality will be implemented in Phase 4');
+    const handleEditProfile = (profile, e) => {
+        e.stopPropagation();
+        setEditingProfile(profile);
+        setShowProfileModal(true);
     };
+
+    const handleProfileModalClose = () => {
+        setShowProfileModal(false);
+        setEditingProfile(null);
+    };
+
+    const handleSaveProfile = async ({ name, email, password, avatar, pin }) => {
+        if (editingProfile) {
+            // Update existing profile
+            const response = await fetch(`${API_BASE}/api/profiles/${editingProfile.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, email, password, avatar, pin })
+            });
+
+            if (!response.ok) {
+                const errData = await response.json();
+                throw new Error(errData.error || 'Failed to update profile');
+            }
+        } else {
+            // Create new profile
+            const response = await fetch(`${API_BASE}/api/profiles`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, email, password, avatar, pin })
+            });
+
+            if (!response.ok) {
+                const errData = await response.json();
+                throw new Error(errData.error || 'Failed to create profile');
+            }
+        }
+
+        setShowProfileModal(false);
+        setEditingProfile(null);
+        await loadProfiles();
+    };
+
+    const handleDeleteProfile = async (profileId) => {
+        const response = await fetch(`${API_BASE}/api/profiles/${profileId}`, {
+            method: 'DELETE'
+        });
+
+        if (!response.ok) {
+            const errData = await response.json();
+            throw new Error(errData.error || 'Failed to delete profile');
+        }
+
+        setShowProfileModal(false);
+        setEditingProfile(null);
+        await loadProfiles();
+    };
+
+    // ---- Render ----
 
     if (loading) {
         return (
@@ -134,19 +217,26 @@ const ProfileSelector = () => {
         );
     }
 
+    // Enrich profiles with avatar data
+    const enrichedProfiles = profiles.map(p => ({
+        ...p,
+        avatarData: AVATAR_MAP[p.avatar] || null
+    }));
+
     return (
         <div className={styles['profile-selector-container']}>
             <div className={styles['header']}>
-                <h1>Who's watching?</h1>
+                <h1>Who&apos;s watching?</h1>
                 <p>Select your profile to continue</p>
             </div>
 
             <div className={styles['profile-grid']}>
-                {profiles.map((profile) => (
+                {enrichedProfiles.map((profile) => (
                     <ProfileCard
                         key={profile.id}
                         profile={profile}
                         onClick={handleProfileClick}
+                        onEdit={handleEditProfile}
                     />
                 ))}
 
@@ -156,21 +246,32 @@ const ProfileSelector = () => {
                     tabIndex={0}
                     role="button"
                     aria-label="Add new profile"
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            handleAddProfile();
+                        }
+                    }}
                 >
                     <div className={styles['add-icon']}>+</div>
                     <div className={styles['add-text']}>Add Profile</div>
                 </div>
             </div>
 
-            <button className={styles['manage-profiles-btn']} onClick={handleManageProfiles}>
-                Manage Profiles
-            </button>
-
             {showPinModal && selectedProfile && (
                 <PinModal
                     profileName={selectedProfile.name}
                     onSubmit={handlePinSubmit}
                     onCancel={handlePinCancel}
+                />
+            )}
+
+            {showProfileModal && (
+                <ProfileModal
+                    profile={editingProfile}
+                    onSave={handleSaveProfile}
+                    onDelete={editingProfile ? handleDeleteProfile : null}
+                    onClose={handleProfileModalClose}
                 />
             )}
         </div>
