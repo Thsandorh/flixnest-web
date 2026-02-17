@@ -11,6 +11,8 @@ This is a forked version of Stremio Web with built-in profile switching function
 - 🔒 **Encrypted Storage**: Profile passwords encrypted with AES-256
 - 🌐 **Stremio API Integration**: Seamless login proxy to official Stremio API
 - 📱 **Responsive UI**: Works on desktop, mobile, and TV
+- ➕ **Web UI for Profile Management**: Add, edit and delete profiles directly in the browser
+- 🔄 **Auto authKey Renewal**: Silently refreshes expired sessions on startup
 
 ## Prerequisites
 
@@ -40,22 +42,9 @@ STREMIO_API_URL=https://api.strem.io/api
 
 ### Adding Profiles
 
-Edit `server/data/profiles.json` to add your Stremio accounts:
+The easiest way is to use the built-in web UI: open the profile selector in your browser and click **"+ Add Profile"**. Enter the profile name, Stremio email/password, choose an avatar, and optionally set a PIN.
 
-```json
-[
-    {
-        "id": "profile_1",
-        "name": "John",
-        "avatar": "avatar1.png",
-        "email": "john@example.com",
-        "encryptedPassword": "",
-        "pin": null
-    }
-]
-```
-
-**Important**: Leave `encryptedPassword` empty initially. You can add profiles through the API or manually encrypt passwords using the encryption utility.
+Alternatively, you can edit `server/data/profiles.json` directly. Leave `encryptedPassword` empty and use the encryption utility below to fill it in.
 
 ### Encrypting Passwords
 
@@ -120,6 +109,7 @@ pnpm run server:prod
 ### Authentication
 
 - `POST /api/auth/switch` - Switch to a profile (returns authKey)
+- `POST /api/auth/refresh` - Silently re-authenticate to renew an expired authKey (no PIN needed)
 - `POST /api/auth/verify-pin` - Verify a PIN without logging in
 
 ## Project Structure
@@ -181,11 +171,38 @@ localStorage.clear();
 location.reload();
 ```
 
-## Next Steps
+## Building the Android APK
 
-- **Phase 2**: Login flow modifications, profile switch button, logout redirect
-- **Phase 3**: Android APK for TV and mobile
-- **Phase 4**: PIN management UI, avatar selector, profile admin interface
+The project includes a GitHub Actions workflow for building APKs.
+
+### One-click build (manual trigger)
+
+1. Go to **Actions → Build APK** on GitHub
+2. Click **"Run workflow"**
+3. Optionally set a version name (default: `dev`)
+4. Download the APKs from the **Artifacts** section once the build completes
+
+### Automatic release build (via git tag)
+
+Push a version tag to trigger a full release with GitHub Release + APK download links:
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+### Optional: APK signing
+
+For signed APKs, add these repository secrets (Settings → Secrets and variables → Actions):
+
+| Secret | Description |
+|---|---|
+| `KEYSTORE_BASE64` | Base64-encoded `.jks` keystore file |
+| `KEYSTORE_PASSWORD` | Keystore password |
+| `KEY_ALIAS` | Key alias inside the keystore |
+| `KEY_PASSWORD` | Key password |
+
+Without these secrets the workflow still builds successfully — it just produces an unsigned APK.
 
 ## License
 
