@@ -12,11 +12,5 @@
         <item name="colorAccent">#764ba2</item>
     </style>
 
-    <!-- TV theme -->
-    <style name="AppTheme.TV" parent="Theme.Leanback">
-        <item name="android:windowBackground">#1a1a2e</item>
-        <item name="android:statusBarColor">#1a1a2e</item>
-        <item name="android:windowFullscreen">true</item>
-        <item name="android:windowNoTitle">true</item>
-    </style>
+
 </resources>
