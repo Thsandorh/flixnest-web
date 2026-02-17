@@ -1,6 +1,10 @@
 // Copyright (C) 2017-2023 Smart code 203358507
 
 const routesRegexp = {
+    profileSelector: {
+        regexp: /^\/profile-selector$/,
+        urlParamsNames: []
+    },
     intro: {
         regexp: /^\/intro$/,
         urlParamsNames: []

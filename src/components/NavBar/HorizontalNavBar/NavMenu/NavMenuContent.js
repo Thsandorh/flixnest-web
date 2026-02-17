@@ -37,6 +37,16 @@ const NavMenuContent = ({ onClick }) => {
             }
         });
     }, []);
+    const switchProfileOnClick = React.useCallback(() => {
+        // Dispatch logout so the core clears its state, then
+        // withProtectedRoutes will redirect to ProfileSelector
+        core.transport.dispatch({
+            action: 'Ctx',
+            args: {
+                action: 'Logout'
+            }
+        });
+    }, []);
     const onPlayMagnetLinkClick = React.useCallback(async () => {
         try {
             const clipboardText = await navigator.clipboard.readText();
@@ -75,6 +85,17 @@ const NavMenuContent = ({ onClick }) => {
                         <Button className={styles['nav-menu-option-container']} title={fullscreen ? t('EXIT_FULLSCREEN') : t('ENTER_FULLSCREEN')} onClick={fullscreen ? exitFullscreen : requestFullscreen}>
                             <Icon className={styles['icon']} name={fullscreen ? 'minimize' : 'maximize'} />
                             <div className={styles['nav-menu-option-label']}>{fullscreen ? t('EXIT_FULLSCREEN') : t('ENTER_FULLSCREEN')}</div>
+                        </Button>
+                    </div>
+                    :
+                    null
+            }
+            {
+                profile.auth !== null ?
+                    <div className={styles['nav-menu-section']}>
+                        <Button className={styles['nav-menu-option-container']} title={'Switch Profile'} onClick={switchProfileOnClick}>
+                            <Icon className={styles['icon']} name={'person'} />
+                            <div className={styles['nav-menu-option-label']}>Switch Profile</div>
                         </Button>
                     </div>
                     :
