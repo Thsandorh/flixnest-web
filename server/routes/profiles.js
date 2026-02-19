@@ -1,201 +1,225 @@
 // Copyright (C) 2017-2023 Smart code 203358507
 
+const crypto = require('crypto');
 const express = require('express');
+const { encrypt, decrypt } = require('../utils/encryption');
+const { loginToStremio } = require('../utils/stremioAuth');
+const { getScopeIdFromRequest, loadProfilesByScope, saveProfilesByScope } = require('../utils/profileStore');
+
 const router = express.Router();
-const fs = require('fs').promises;
-const path = require('path');
-const { encrypt } = require('../utils/encryption');
+const VALIDATE_PROFILE_LOGIN = String(process.env.PROFILE_VALIDATE_LOGIN || 'true').toLowerCase() !== 'false';
 
-const PROFILES_FILE = path.join(__dirname, '../data/profiles.json');
-const PROFILES_DIR = path.dirname(PROFILES_FILE);
+function createBadRequestError(message) {
+    const error = new Error(message);
+    error.status = 400;
+    return error;
+}
 
-/**
- * Load profiles from JSON file
- */
-async function loadProfiles() {
+function normalizeName(value) {
+    return typeof value === 'string' ? value.trim() : '';
+}
+
+function normalizeEmail(value) {
+    return typeof value === 'string' ? value.trim().toLowerCase() : '';
+}
+
+function normalizeAvatar(value) {
+    const avatar = typeof value === 'string' ? value.trim() : '';
+    return avatar || 'avatar1';
+}
+
+function normalizePin(value) {
+    if (value === null || value === undefined || value === '') {
+        return null;
+    }
+
+    const pin = String(value).trim();
+    if (!/^\d{4}$/.test(pin)) {
+        throw createBadRequestError('PIN must be exactly 4 digits');
+    }
+
+    return pin;
+}
+
+function generateProfileId() {
+    if (typeof crypto.randomUUID === 'function') {
+        return `profile_${crypto.randomUUID()}`;
+    }
+
+    return `profile_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function toPublicProfile(profile) {
+    return {
+        id: profile.id,
+        name: profile.name,
+        avatar: profile.avatar,
+        hasPin: !!profile.pin
+    };
+}
+
+function assertRequiredFields(name, email, password) {
+    if (!name || !email || !password) {
+        throw createBadRequestError('Name, email, and password are required');
+    }
+}
+
+async function validateStremioCredentialsIfEnabled(email, password) {
+    if (!VALIDATE_PROFILE_LOGIN) {
+        return;
+    }
+
     try {
-        const data = await fs.readFile(PROFILES_FILE, 'utf8');
-        return JSON.parse(data);
+        await loginToStremio(email, password);
     } catch (error) {
-        if (error.code === 'ENOENT') {
-            await fs.mkdir(PROFILES_DIR, { recursive: true });
-            await fs.writeFile(PROFILES_FILE, '[]', 'utf8');
-            return [];
+        if (error && (error.status === 401 || error.status === 404)) {
+            throw createBadRequestError('Invalid Stremio email or password');
         }
+
         throw error;
     }
 }
 
-/**
- * Save profiles to JSON file
- */
-async function saveProfiles(profiles) {
-    await fs.mkdir(PROFILES_DIR, { recursive: true });
-    await fs.writeFile(PROFILES_FILE, JSON.stringify(profiles, null, 4), 'utf8');
-}
-
-/**
- * GET /api/profiles
- * Return list of profiles (without passwords)
- */
 router.get('/', async (req, res) => {
     try {
-        const profiles = await loadProfiles();
-
-        // Remove sensitive data before sending
-        const safeProfiles = profiles.map(profile => ({
-            id: profile.id,
-            name: profile.name,
-            avatar: profile.avatar,
-            hasPin: !!profile.pin
-        }));
-
-        res.json(safeProfiles);
+        const scopeId = getScopeIdFromRequest(req);
+        const profiles = await loadProfilesByScope(scopeId);
+        return res.json(profiles.map(toPublicProfile));
     } catch (error) {
         console.error('Error fetching profiles:', error);
-        res.status(500).json({ error: 'Failed to fetch profiles' });
+        return res.status(error.status || 500).json({ error: error.message || 'Failed to fetch profiles' });
     }
 });
 
-/**
- * POST /api/profiles
- * Create a new profile
- * Body: { name, avatar, email, password, pin? }
- */
 router.post('/', async (req, res) => {
     try {
-        const { name, avatar, email, password, pin } = req.body;
+        const scopeId = getScopeIdFromRequest(req);
+        const name = normalizeName(req.body.name);
+        const email = normalizeEmail(req.body.email);
+        const password = typeof req.body.password === 'string' ? req.body.password : '';
+        const avatar = normalizeAvatar(req.body.avatar);
+        const pin = normalizePin(req.body.pin);
 
-        if (!name || !email || !password) {
-            return res.status(400).json({ error: 'Name, email, and password are required' });
-        }
+        assertRequiredFields(name, email, password);
 
-        const profiles = await loadProfiles();
+        const profiles = await loadProfilesByScope(scopeId);
 
-        // Check if email already exists
-        if (profiles.some(p => p.email === email)) {
-            return res.status(409).json({ error: 'Profile with this email already exists' });
-        }
+        await validateStremioCredentialsIfEnabled(email, password);
 
-        // Encrypt password
         const encryptedPassword = encrypt(password, process.env.ENCRYPTION_KEY);
-
         const newProfile = {
-            id: `profile_${Date.now()}`,
+            id: generateProfileId(),
             name,
-            avatar: avatar || 'avatar1',
+            avatar,
             email,
             encryptedPassword,
-            pin: pin || null
+            pin
         };
 
         profiles.push(newProfile);
-        await saveProfiles(profiles);
+        await saveProfilesByScope(scopeId, profiles);
 
-        res.status(201).json({
-            id: newProfile.id,
-            name: newProfile.name,
-            avatar: newProfile.avatar,
-            hasPin: !!newProfile.pin
-        });
+        return res.status(201).json(toPublicProfile(newProfile));
     } catch (error) {
         console.error('Error creating profile:', error);
-        res.status(500).json({ error: 'Failed to create profile' });
+        return res.status(error.status || 500).json({ error: error.message || 'Failed to create profile' });
     }
 });
 
-/**
- * GET /api/profiles/:id
- * Return profile details for editor (without password)
- */
 router.get('/:id', async (req, res) => {
     try {
-        const { id } = req.params;
-        const profiles = await loadProfiles();
-        const profile = profiles.find((p) => p.id === id);
+        const scopeId = getScopeIdFromRequest(req);
+        const id = typeof req.params.id === 'string' ? req.params.id.trim() : '';
+        const profiles = await loadProfilesByScope(scopeId);
+        const profile = profiles.find((item) => item && item.id === id);
 
         if (!profile) {
             return res.status(404).json({ error: 'Profile not found' });
         }
 
-        res.json({
+        return res.json({
             id: profile.id,
             name: profile.name,
             avatar: profile.avatar,
             email: profile.email,
+            pin: profile.pin || '',
             hasPin: !!profile.pin
         });
     } catch (error) {
         console.error('Error fetching profile:', error);
-        res.status(500).json({ error: 'Failed to fetch profile' });
+        return res.status(500).json({ error: 'Failed to fetch profile' });
     }
 });
 
-/**
- * PUT /api/profiles/:id
- * Update an existing profile
- * Body: { name?, avatar?, email?, password?, pin? }
- */
 router.put('/:id', async (req, res) => {
     try {
-        const { id } = req.params;
-        const { name, avatar, email, password, pin } = req.body;
-
-        const profiles = await loadProfiles();
-        const profileIndex = profiles.findIndex(p => p.id === id);
+        const scopeId = getScopeIdFromRequest(req);
+        const id = typeof req.params.id === 'string' ? req.params.id.trim() : '';
+        const profiles = await loadProfilesByScope(scopeId);
+        const profileIndex = profiles.findIndex((profile) => profile && profile.id === id);
 
         if (profileIndex === -1) {
             return res.status(404).json({ error: 'Profile not found' });
         }
 
-        const profile = profiles[profileIndex];
+        const currentProfile = profiles[profileIndex];
+        const name = req.body.name !== undefined ? normalizeName(req.body.name) : currentProfile.name;
+        const avatar = req.body.avatar !== undefined ? normalizeAvatar(req.body.avatar) : currentProfile.avatar;
+        const email = req.body.email !== undefined && req.body.email !== ''
+            ? normalizeEmail(req.body.email)
+            : currentProfile.email;
 
-        if (email && profiles.some((p) => p.email === email && p.id !== id)) {
-            return res.status(409).json({ error: 'Profile with this email already exists' });
+        if (!name || !email) {
+            return res.status(400).json({ error: 'Name and email are required' });
         }
 
-        // Update fields
-        if (name) profile.name = name;
-        if (avatar) profile.avatar = avatar;
-        if (email) profile.email = email;
-        if (password) profile.encryptedPassword = encrypt(password, process.env.ENCRYPTION_KEY);
-        if (pin !== undefined) profile.pin = pin;
+        const nextProfile = {
+            ...currentProfile,
+            name,
+            avatar,
+            email
+        };
+        const emailChanged = normalizeEmail(currentProfile.email) !== email;
 
-        profiles[profileIndex] = profile;
-        await saveProfiles(profiles);
+        if (req.body.password !== undefined && req.body.password !== '') {
+            const password = String(req.body.password);
+            await validateStremioCredentialsIfEnabled(email, password);
+            nextProfile.encryptedPassword = encrypt(password, process.env.ENCRYPTION_KEY);
+        } else if (emailChanged && VALIDATE_PROFILE_LOGIN) {
+            const currentPassword = decrypt(currentProfile.encryptedPassword, process.env.ENCRYPTION_KEY);
+            await loginToStremio(email, currentPassword);
+        }
 
-        res.json({
-            id: profile.id,
-            name: profile.name,
-            avatar: profile.avatar,
-            hasPin: !!profile.pin
-        });
+        if (req.body.pin !== undefined) {
+            nextProfile.pin = normalizePin(req.body.pin);
+        }
+
+        profiles[profileIndex] = nextProfile;
+        await saveProfilesByScope(scopeId, profiles);
+
+        return res.json(toPublicProfile(nextProfile));
     } catch (error) {
         console.error('Error updating profile:', error);
-        res.status(500).json({ error: 'Failed to update profile' });
+        return res.status(error.status || 500).json({ error: error.message || 'Failed to update profile' });
     }
 });
 
-/**
- * DELETE /api/profiles/:id
- * Delete a profile
- */
 router.delete('/:id', async (req, res) => {
     try {
-        const { id } = req.params;
+        const scopeId = getScopeIdFromRequest(req);
+        const id = typeof req.params.id === 'string' ? req.params.id.trim() : '';
+        const profiles = await loadProfilesByScope(scopeId);
+        const nextProfiles = profiles.filter((profile) => profile && profile.id !== id);
 
-        const profiles = await loadProfiles();
-        const filteredProfiles = profiles.filter(p => p.id !== id);
-
-        if (filteredProfiles.length === profiles.length) {
+        if (nextProfiles.length === profiles.length) {
             return res.status(404).json({ error: 'Profile not found' });
         }
 
-        await saveProfiles(filteredProfiles);
-        res.status(204).send();
+        await saveProfilesByScope(scopeId, nextProfiles);
+        return res.status(204).send();
     } catch (error) {
         console.error('Error deleting profile:', error);
-        res.status(500).json({ error: 'Failed to delete profile' });
+        return res.status(500).json({ error: 'Failed to delete profile' });
     }
 });
 

@@ -61,6 +61,17 @@ function Shell() {
             starting = false;
             onStateChanged();
         } catch (e) {
+            const message = e instanceof Error ? e.message : String(e);
+            if (message.includes('no viable transport found')) {
+                // Normal in browser mode (Qt bridge is available only in desktop shell).
+                active = false;
+                error = null;
+                starting = false;
+                transport = null;
+                onStateChanged();
+                return;
+            }
+
             console.error(e);
             active = false;
             error = new Error('Failed to initialize shell transport', { cause: e });

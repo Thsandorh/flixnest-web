@@ -2,126 +2,187 @@
 
 const React = require('react');
 const { useTranslation } = require('react-i18next');
+const { useProfile } = require('stremio/common');
 const ProfileCard = require('./ProfileCard');
 const PinModal = require('./PinModal');
 const ProfileModal = require('./ProfileModal');
 const { AVATAR_OPTIONS } = require('./ProfileModal');
+const { scopedFetch } = require('./profileApi');
+const {
+    persistAuthenticatedSession,
+    clearAuthenticatedSession,
+    getActiveProfileId
+} = require('./profileSession');
 const styles = require('./styles');
 
-const API_BASE = typeof window !== 'undefined' && window.location.origin;
+const API_BASE = typeof window !== 'undefined'
+    ? `${window.location.origin}${String(window.__STREMIO_BASE_PATH__ || '').replace(/\/+$/, '')}`
+    : '';
 
-// Map avatar id → emoji for display
-const AVATAR_MAP = AVATAR_OPTIONS.reduce((acc, a) => {
-    acc[a.id] = a;
-    acc[`${a.id}.png`] = a;
-    return acc;
+const AVATAR_MAP = AVATAR_OPTIONS.reduce((accumulator, avatar) => {
+    accumulator[avatar.id] = avatar;
+    accumulator[`${avatar.id}.png`] = avatar;
+    return accumulator;
 }, {});
+
+function parseJsonSafe(text) {
+    try {
+        return JSON.parse(text);
+    } catch (_) {
+        return null;
+    }
+}
+
+async function parseApiResponse(response) {
+    const text = await response.text();
+    const json = text ? parseJsonSafe(text) : null;
+
+    if (!response.ok) {
+        const errorMessage = json && typeof json.error === 'string' && json.error.length > 0
+            ? json.error
+            : text || `Request failed with status ${response.status}`;
+        throw new Error(errorMessage);
+    }
+
+    return json;
+}
+
+function navigateToApp() {
+    window.location.hash = '#/';
+    window.location.reload();
+}
 
 const ProfileSelector = () => {
     const { t } = useTranslation();
+    const currentProfile = useProfile();
+    const currentProfileRef = React.useRef(currentProfile);
+
     const [profiles, setProfiles] = React.useState([]);
     const [loading, setLoading] = React.useState(true);
     const [error, setError] = React.useState(null);
+    const [switchingProfileId, setSwitchingProfileId] = React.useState(null);
 
-    // Profile switching
     const [selectedProfile, setSelectedProfile] = React.useState(null);
     const [showPinModal, setShowPinModal] = React.useState(false);
 
-    // Profile management
     const [showProfileModal, setShowProfileModal] = React.useState(false);
     const [editingProfile, setEditingProfile] = React.useState(null);
 
-    // Load profiles on mount + auto-refresh authKey if a profile is already active
     React.useEffect(() => {
-        checkAndRefreshAuth();
-        loadProfiles();
-    }, []);
+        currentProfileRef.current = currentProfile;
+    }, [currentProfile]);
 
-    /**
-     * If there is an already-active profile in localStorage, silently re-authenticate
-     * to get a fresh authKey and redirect to the app without showing the selector.
-     */
-    const checkAndRefreshAuth = async () => {
+    const loadProfiles = React.useCallback(async () => {
+        setLoading(true);
+        setError(null);
+
         try {
-            const stored = localStorage.getItem('profile');
-            if (!stored) return;
-
-            const parsed = JSON.parse(stored);
-            const profileId = parsed?.profileInfo?.id;
-            if (!profileId) return;
-
-            const response = await fetch(`${API_BASE}/api/auth/refresh`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ profileId })
-            });
-
-            if (!response.ok) {
-                // Cannot refresh (credentials may have changed) — let the user pick again
-                localStorage.removeItem('profile');
-                return;
-            }
-
-            const data = await response.json();
-
-            localStorage.setItem('profile', JSON.stringify({
-                auth: { key: data.authKey, user: data.user },
-                profileInfo: data.profile
-            }));
-
-            // Navigate to main app with fresh authKey
-            window.location.href = '/';
-        } catch (err) {
-            // Non-critical: just show the profile selector normally
-            console.warn('Auto-refresh failed:', err);
-        }
-    };
-
-    const loadProfiles = async () => {
-        try {
-            setLoading(true);
-            setError(null);
-
-            const response = await fetch(`${API_BASE}/api/profiles`);
-            if (!response.ok) {
-                throw new Error('Failed to load profiles');
-            }
-
-            const data = await response.json();
-            setProfiles(data);
-        } catch (err) {
-            console.error('Error loading profiles:', err);
-            setError(err.message);
+            const response = await scopedFetch(`${API_BASE}/api/profiles`);
+            const data = await parseApiResponse(response);
+            setProfiles(Array.isArray(data) ? data : []);
+        } catch (loadError) {
+            console.error('Error loading profiles:', loadError);
+            setError(loadError.message || 'Failed to load profiles');
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
 
-    // ---- Profile switching ----
+    const restoreSession = React.useCallback(async () => {
+        if (currentProfileRef.current && currentProfileRef.current.auth) {
+            return false;
+        }
 
-    const handleProfileClick = (profile) => {
+        const activeProfileId = getActiveProfileId();
+        if (!activeProfileId) {
+            return false;
+        }
+
+        try {
+            const response = await scopedFetch(`${API_BASE}/api/auth/refresh`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ profileId: activeProfileId })
+            });
+            const payload = await parseApiResponse(response);
+            persistAuthenticatedSession(payload || {}, activeProfileId);
+            navigateToApp();
+            return true;
+        } catch (refreshError) {
+            console.warn('Failed to restore session:', refreshError);
+            clearAuthenticatedSession();
+            return false;
+        }
+    }, []);
+
+    React.useEffect(() => {
+        let cancelled = false;
+
+        const init = async () => {
+            const restored = await restoreSession();
+            if (restored || cancelled) {
+                return;
+            }
+
+            await loadProfiles();
+        };
+
+        init();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [loadProfiles, restoreSession]);
+
+    const switchProfile = React.useCallback(async (profileId, pin) => {
+        setSwitchingProfileId(profileId);
+
+        try {
+            const response = await scopedFetch(`${API_BASE}/api/auth/switch`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ profileId, pin })
+            });
+
+            const payload = await parseApiResponse(response);
+            persistAuthenticatedSession(payload || {}, profileId);
+
+            setShowPinModal(false);
+            setSelectedProfile(null);
+            navigateToApp();
+        } finally {
+            setSwitchingProfileId(null);
+        }
+    }, []);
+
+    const handleProfileClick = async (profile) => {
+        if (switchingProfileId) {
+            return;
+        }
+
         if (profile.hasPin) {
             setSelectedProfile(profile);
             setShowPinModal(true);
-        } else {
-            switchProfile(profile.id, null);
+            return;
+        }
+
+        try {
+            await switchProfile(profile.id, null);
+        } catch (switchError) {
+            console.error('Error switching profile:', switchError);
+            alert(`Failed to switch profile: ${switchError.message}`);
         }
     };
 
     const handlePinSubmit = async (pin) => {
-        if (selectedProfile) {
-            // Verify PIN first — throws on failure so PinModal can show inline error
-            const verifyRes = await fetch(`${API_BASE}/api/auth/verify-pin`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ profileId: selectedProfile.id, pin })
-            });
+        if (!selectedProfile) {
+            return;
+        }
 
-            if (!verifyRes.ok) {
-                throw new Error('Incorrect PIN. Please try again.');
-            }
-
+        try {
             await switchProfile(selectedProfile.id, pin);
+        } catch (switchError) {
+            throw new Error(switchError.message || 'Failed to switch profile');
         }
     };
 
@@ -130,68 +191,22 @@ const ProfileSelector = () => {
         setSelectedProfile(null);
     };
 
-    const switchProfile = async (profileId, pin) => {
-        try {
-            const response = await fetch(`${API_BASE}/api/auth/switch`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ profileId, pin })
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || 'Failed to switch profile');
-            }
-
-            const data = await response.json();
-
-            // Store auth data in localStorage for Stremio core to pick up
-            localStorage.setItem('profile', JSON.stringify({
-                auth: {
-                    key: data.authKey,
-                    user: data.user
-                },
-                profileInfo: data.profile
-            }));
-
-            // Close PIN modal if open
-            setShowPinModal(false);
-            setSelectedProfile(null);
-
-            // Reload the page so Stremio core initializes with the new authKey
-            window.location.reload();
-        } catch (err) {
-            console.error('Error switching profile:', err);
-            alert(`Failed to switch profile: ${err.message}`);
-            setShowPinModal(false);
-            setSelectedProfile(null);
-        }
-    };
-
-    // ---- Profile management (Phase 4) ----
-
     const handleAddProfile = () => {
         setEditingProfile(null);
         setShowProfileModal(true);
     };
 
-    const handleEditProfile = async (profile, e) => {
-        e.stopPropagation();
-        try {
-            const response = await fetch(`${API_BASE}/api/profiles/${profile.id}`);
-            if (!response.ok) {
-                const errData = await response.json().catch(() => ({}));
-                throw new Error(errData.error || 'Failed to load profile details');
-            }
+    const handleEditProfile = async (profile, event) => {
+        event.stopPropagation();
 
-            const details = await response.json();
-            setEditingProfile(details);
+        try {
+            const response = await scopedFetch(`${API_BASE}/api/profiles/${profile.id}`);
+            const details = await parseApiResponse(response);
+            setEditingProfile(details || null);
             setShowProfileModal(true);
-        } catch (err) {
-            console.error('Error loading profile details:', err);
-            alert(`Failed to load profile details: ${err.message}`);
+        } catch (loadError) {
+            console.error('Error loading profile details:', loadError);
+            alert(`Failed to load profile details: ${loadError.message}`);
         }
     };
 
@@ -202,29 +217,19 @@ const ProfileSelector = () => {
 
     const handleSaveProfile = async ({ name, email, password, avatar, pin }) => {
         if (editingProfile) {
-            // Update existing profile
-            const response = await fetch(`${API_BASE}/api/profiles/${editingProfile.id}`, {
+            const response = await scopedFetch(`${API_BASE}/api/profiles/${editingProfile.id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ name, email, password, avatar, pin })
             });
-
-            if (!response.ok) {
-                const errData = await response.json();
-                throw new Error(errData.error || 'Failed to update profile');
-            }
+            await parseApiResponse(response);
         } else {
-            // Create new profile
-            const response = await fetch(`${API_BASE}/api/profiles`, {
+            const response = await scopedFetch(`${API_BASE}/api/profiles`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ name, email, password, avatar, pin })
             });
-
-            if (!response.ok) {
-                const errData = await response.json();
-                throw new Error(errData.error || 'Failed to create profile');
-            }
+            await parseApiResponse(response);
         }
 
         setShowProfileModal(false);
@@ -233,21 +238,18 @@ const ProfileSelector = () => {
     };
 
     const handleDeleteProfile = async (profileId) => {
-        const response = await fetch(`${API_BASE}/api/profiles/${profileId}`, {
+        const response = await scopedFetch(`${API_BASE}/api/profiles/${profileId}`, {
             method: 'DELETE'
         });
 
-        if (!response.ok) {
-            const errData = await response.json();
-            throw new Error(errData.error || 'Failed to delete profile');
+        if (!response.ok && response.status !== 204) {
+            await parseApiResponse(response);
         }
 
         setShowProfileModal(false);
         setEditingProfile(null);
         await loadProfiles();
     };
-
-    // ---- Render ----
 
     if (loading) {
         return (
@@ -269,10 +271,9 @@ const ProfileSelector = () => {
         );
     }
 
-    // Enrich profiles with avatar data
-    const enrichedProfiles = profiles.map((p) => ({
-        ...p,
-        avatarData: AVATAR_MAP[p.avatar] || null
+    const enrichedProfiles = profiles.map((profile) => ({
+        ...profile,
+        avatarData: AVATAR_MAP[profile.avatar] || null
     }));
 
     return (
@@ -298,9 +299,9 @@ const ProfileSelector = () => {
                     tabIndex={0}
                     role="button"
                     aria-label="Add new profile"
-                    onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault();
+                    onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
                             handleAddProfile();
                         }
                     }}
@@ -326,6 +327,8 @@ const ProfileSelector = () => {
                     onClose={handleProfileModalClose}
                 />
             )}
+
+            {switchingProfileId && <div className={styles['loading']}>{t('PROFILE_LOADING')}</div>}
         </div>
     );
 };

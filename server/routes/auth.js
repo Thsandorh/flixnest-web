@@ -1,204 +1,142 @@
 // Copyright (C) 2017-2023 Smart code 203358507
 
 const express = require('express');
-const router = express.Router();
-const fs = require('fs').promises;
-const path = require('path');
 const { decrypt } = require('../utils/encryption');
+const { loginToStremio } = require('../utils/stremioAuth');
+const { getScopeIdFromRequest, loadProfilesByScope } = require('../utils/profileStore');
 
-const PROFILES_FILE = path.join(__dirname, '../data/profiles.json');
-const PROFILES_DIR = path.dirname(PROFILES_FILE);
-const STREMIO_API_URL = process.env.STREMIO_API_URL || 'https://api.strem.io/api';
+const router = express.Router();
 
-/**
- * Load profiles from JSON file
- */
-async function loadProfiles() {
-    try {
-        const data = await fs.readFile(PROFILES_FILE, 'utf8');
-        return JSON.parse(data);
-    } catch (error) {
-        if (error.code === 'ENOENT') {
-            await fs.mkdir(PROFILES_DIR, { recursive: true });
-            await fs.writeFile(PROFILES_FILE, '[]', 'utf8');
-            return [];
-        }
-        throw error;
+function normalizePin(value) {
+    if (value === null || value === undefined) {
+        return null;
     }
+
+    const pin = String(value).trim();
+    if (!pin) {
+        return null;
+    }
+
+    return pin;
 }
 
-/**
- * POST /api/auth/switch
- * Switch to a profile by logging in to Stremio API
- * Body: { profileId, pin? }
- */
+function findProfileById(profiles, profileId) {
+    return profiles.find((profile) => profile && profile.id === profileId) || null;
+}
+
+function getDecryptedPassword(profile) {
+    if (!profile || typeof profile.encryptedPassword !== 'string' || profile.encryptedPassword.length === 0) {
+        throw new Error('Stored profile password is missing');
+    }
+
+    return decrypt(profile.encryptedPassword, process.env.ENCRYPTION_KEY);
+}
+
+function buildAuthPayload(profile, login) {
+    return {
+        authKey: login.authKey,
+        auth: {
+            key: login.authKey,
+            user: login.user
+        },
+        user: login.user,
+        profile: {
+            id: profile.id,
+            name: profile.name,
+            avatar: profile.avatar
+        }
+    };
+}
+
+async function loginWithStoredProfile(profile) {
+    const password = getDecryptedPassword(profile);
+    return loginToStremio(profile.email, password);
+}
+
 router.post('/switch', async (req, res) => {
     try {
-        const { profileId, pin } = req.body;
+        const scopeId = getScopeIdFromRequest(req);
+        const profileId = typeof req.body.profileId === 'string' ? req.body.profileId.trim() : '';
+        const pin = normalizePin(req.body.pin);
 
         if (!profileId) {
             return res.status(400).json({ error: 'Profile ID is required' });
         }
 
-        const profiles = await loadProfiles();
-        const profile = profiles.find(p => p.id === profileId);
+        const profiles = await loadProfilesByScope(scopeId);
+        const profile = findProfileById(profiles, profileId);
 
         if (!profile) {
             return res.status(404).json({ error: 'Profile not found' });
         }
 
-        // Check PIN if required
-        if (profile.pin && profile.pin !== pin) {
+        const expectedPin = normalizePin(profile.pin);
+        if (expectedPin && pin !== expectedPin) {
             return res.status(401).json({ error: 'Invalid PIN' });
         }
 
-        // Decrypt password
-        let password;
-        try {
-            password = decrypt(profile.encryptedPassword, process.env.ENCRYPTION_KEY);
-        } catch (error) {
-            console.error('Error decrypting password:', error);
-            return res.status(500).json({ error: 'Failed to decrypt password. Check ENCRYPTION_KEY.' });
-        }
-
-        // Login to Stremio API
-        try {
-            const response = await fetch(`${STREMIO_API_URL}/login`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    email: profile.email,
-                    password: password
-                })
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                console.error('Stremio API error:', errorData);
-                return res.status(response.status).json({
-                    error: errorData.error || 'Stremio login failed'
-                });
-            }
-
-            const data = await response.json();
-
-            // Return authKey and user data
-            res.json({
-                authKey: data.authKey,
-                user: data.user,
-                profile: {
-                    id: profile.id,
-                    name: profile.name,
-                    avatar: profile.avatar
-                }
-            });
-        } catch (error) {
-            console.error('Error calling Stremio API:', error);
-            res.status(500).json({ error: 'Failed to connect to Stremio API' });
-        }
+        const login = await loginWithStoredProfile(profile);
+        return res.json(buildAuthPayload(profile, login));
     } catch (error) {
         console.error('Error switching profile:', error);
-        res.status(500).json({ error: 'Failed to switch profile' });
+        return res.status(error.status || 500).json({ error: error.message || 'Failed to switch profile' });
     }
 });
 
-/**
- * POST /api/auth/refresh
- * Re-authenticate with stored credentials to get a fresh authKey (no PIN required)
- * Intended for auto-renewal when a stored authKey has expired.
- * Body: { profileId }
- */
 router.post('/refresh', async (req, res) => {
     try {
-        const { profileId } = req.body;
+        const scopeId = getScopeIdFromRequest(req);
+        const profileId = typeof req.body.profileId === 'string' ? req.body.profileId.trim() : '';
 
         if (!profileId) {
             return res.status(400).json({ error: 'Profile ID is required' });
         }
 
-        const profiles = await loadProfiles();
-        const profile = profiles.find(p => p.id === profileId);
+        const profiles = await loadProfilesByScope(scopeId);
+        const profile = findProfileById(profiles, profileId);
 
         if (!profile) {
             return res.status(404).json({ error: 'Profile not found' });
         }
 
-        // Decrypt password
-        let password;
-        try {
-            password = decrypt(profile.encryptedPassword, process.env.ENCRYPTION_KEY);
-        } catch (error) {
-            console.error('Error decrypting password:', error);
-            return res.status(500).json({ error: 'Failed to decrypt password. Check ENCRYPTION_KEY.' });
-        }
-
-        // Re-login to Stremio API
-        try {
-            const response = await fetch(`${STREMIO_API_URL}/login`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email: profile.email, password })
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                console.error('Stremio API error during refresh:', errorData);
-                return res.status(response.status).json({
-                    error: errorData.error || 'Stremio login failed during refresh'
-                });
-            }
-
-            const data = await response.json();
-
-            res.json({
-                authKey: data.authKey,
-                user: data.user,
-                profile: {
-                    id: profile.id,
-                    name: profile.name,
-                    avatar: profile.avatar
-                }
-            });
-        } catch (error) {
-            console.error('Error calling Stremio API during refresh:', error);
-            res.status(500).json({ error: 'Failed to connect to Stremio API' });
-        }
+        const login = await loginWithStoredProfile(profile);
+        return res.json(buildAuthPayload(profile, login));
     } catch (error) {
         console.error('Error refreshing authKey:', error);
-        res.status(500).json({ error: 'Failed to refresh authKey' });
+        return res.status(error.status || 500).json({ error: error.message || 'Failed to refresh authKey' });
     }
 });
 
-/**
- * POST /api/auth/verify-pin
- * Verify PIN for a profile without logging in
- * Body: { profileId, pin }
- */
 router.post('/verify-pin', async (req, res) => {
     try {
-        const { profileId, pin } = req.body;
+        const scopeId = getScopeIdFromRequest(req);
+        const profileId = typeof req.body.profileId === 'string' ? req.body.profileId.trim() : '';
+        const pin = normalizePin(req.body.pin);
 
         if (!profileId || !pin) {
             return res.status(400).json({ error: 'Profile ID and PIN are required' });
         }
 
-        const profiles = await loadProfiles();
-        const profile = profiles.find(p => p.id === profileId);
+        const profiles = await loadProfilesByScope(scopeId);
+        const profile = findProfileById(profiles, profileId);
 
         if (!profile) {
             return res.status(404).json({ error: 'Profile not found' });
         }
 
-        if (profile.pin === pin) {
-            res.json({ valid: true });
-        } else {
-            res.status(401).json({ valid: false, error: 'Invalid PIN' });
+        const expectedPin = normalizePin(profile.pin);
+        if (!expectedPin) {
+            return res.status(400).json({ error: 'Profile has no PIN' });
         }
+
+        if (expectedPin !== pin) {
+            return res.status(401).json({ valid: false, error: 'Invalid PIN' });
+        }
+
+        return res.json({ valid: true });
     } catch (error) {
         console.error('Error verifying PIN:', error);
-        res.status(500).json({ error: 'Failed to verify PIN' });
+        return res.status(500).json({ error: 'Failed to verify PIN' });
     }
 });
 

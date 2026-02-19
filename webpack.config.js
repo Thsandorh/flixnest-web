@@ -42,7 +42,7 @@ module.exports = (env, argv) => ({
     },
     output: {
         path: path.join(__dirname, 'build'),
-        filename: `${COMMIT_HASH}/scripts/[name].js`,
+        filename: '[fullhash]/scripts/[name].js',
         clean: true,
     },
     module: {
@@ -169,7 +169,7 @@ module.exports = (env, argv) => ({
                 test: /\.wasm$/,
                 type: 'asset/resource',
                 generator: {
-                    filename: `${COMMIT_HASH}/binaries/[name][ext][query]`
+                    filename: '[contenthash]/binaries/[name][ext][query]'
                 }
             }
         ]
@@ -236,7 +236,7 @@ module.exports = (env, argv) => ({
             ]
         }),
         new MiniCssExtractPlugin({
-            filename: `${COMMIT_HASH}/styles/[name].css`
+            filename: '[fullhash]/styles/[name].css'
         }),
         new HtmlWebPackPlugin({
             template: './src/index.html',
