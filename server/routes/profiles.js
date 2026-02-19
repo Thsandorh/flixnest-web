@@ -4,9 +4,10 @@ const express = require('express');
 const router = express.Router();
 const fs = require('fs').promises;
 const path = require('path');
-const { encrypt, decrypt } = require('../utils/encryption');
+const { encrypt } = require('../utils/encryption');
 
 const PROFILES_FILE = path.join(__dirname, '../data/profiles.json');
+const PROFILES_DIR = path.dirname(PROFILES_FILE);
 
 /**
  * Load profiles from JSON file
@@ -16,8 +17,12 @@ async function loadProfiles() {
         const data = await fs.readFile(PROFILES_FILE, 'utf8');
         return JSON.parse(data);
     } catch (error) {
-        console.error('Error loading profiles:', error);
-        return [];
+        if (error.code === 'ENOENT') {
+            await fs.mkdir(PROFILES_DIR, { recursive: true });
+            await fs.writeFile(PROFILES_FILE, '[]', 'utf8');
+            return [];
+        }
+        throw error;
     }
 }
 
@@ -25,13 +30,8 @@ async function loadProfiles() {
  * Save profiles to JSON file
  */
 async function saveProfiles(profiles) {
-    try {
-        await fs.writeFile(PROFILES_FILE, JSON.stringify(profiles, null, 4), 'utf8');
-        return true;
-    } catch (error) {
-        console.error('Error saving profiles:', error);
-        return false;
-    }
+    await fs.mkdir(PROFILES_DIR, { recursive: true });
+    await fs.writeFile(PROFILES_FILE, JSON.stringify(profiles, null, 4), 'utf8');
 }
 
 /**
@@ -83,7 +83,7 @@ router.post('/', async (req, res) => {
         const newProfile = {
             id: `profile_${Date.now()}`,
             name,
-            avatar: avatar || 'avatar1.png',
+            avatar: avatar || 'avatar1',
             email,
             encryptedPassword,
             pin: pin || null
@@ -105,6 +105,33 @@ router.post('/', async (req, res) => {
 });
 
 /**
+ * GET /api/profiles/:id
+ * Return profile details for editor (without password)
+ */
+router.get('/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const profiles = await loadProfiles();
+        const profile = profiles.find((p) => p.id === id);
+
+        if (!profile) {
+            return res.status(404).json({ error: 'Profile not found' });
+        }
+
+        res.json({
+            id: profile.id,
+            name: profile.name,
+            avatar: profile.avatar,
+            email: profile.email,
+            hasPin: !!profile.pin
+        });
+    } catch (error) {
+        console.error('Error fetching profile:', error);
+        res.status(500).json({ error: 'Failed to fetch profile' });
+    }
+});
+
+/**
  * PUT /api/profiles/:id
  * Update an existing profile
  * Body: { name?, avatar?, email?, password?, pin? }
@@ -122,6 +149,10 @@ router.put('/:id', async (req, res) => {
         }
 
         const profile = profiles[profileIndex];
+
+        if (email && profiles.some((p) => p.email === email && p.id !== id)) {
+            return res.status(409).json({ error: 'Profile with this email already exists' });
+        }
 
         // Update fields
         if (name) profile.name = name;

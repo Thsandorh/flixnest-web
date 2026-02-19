@@ -9,6 +9,7 @@
     "PROFILE_PASSWORD_LABEL": "Stremio Password",
     "PROFILE_PIN_LABEL": "PIN (optional, 4 digits)",
     "PROFILE_DELETE": "Delete",
+    "PROFILE_EDIT": "Edit",
     "PROFILE_LOADING": "Loading profiles...",
     "PROFILE_ERROR_LOADING": "Error Loading Profiles",
     "RETRY": "Retry",

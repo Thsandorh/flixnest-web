@@ -6,18 +6,18 @@ const { useTranslation } = require('react-i18next');
 
 // Available avatar options (emoji-based)
 const AVATAR_OPTIONS = [
-    { id: 'avatar1', emoji: '🦁', bg: '#e74c3c' },
-    { id: 'avatar2', emoji: '🐯', bg: '#e67e22' },
-    { id: 'avatar3', emoji: '🐻', bg: '#f39c12' },
-    { id: 'avatar4', emoji: '🐼', bg: '#2ecc71' },
-    { id: 'avatar5', emoji: '🐨', bg: '#1abc9c' },
-    { id: 'avatar6', emoji: '🦊', bg: '#3498db' },
-    { id: 'avatar7', emoji: '🐺', bg: '#9b59b6' },
-    { id: 'avatar8', emoji: '🦝', bg: '#e91e63' },
-    { id: 'avatar9', emoji: '🐸', bg: '#00bcd4' },
-    { id: 'avatar10', emoji: '🦄', bg: '#ff5722' },
-    { id: 'avatar11', emoji: '🐧', bg: '#795548' },
-    { id: 'avatar12', emoji: '🦋', bg: '#607d8b' },
+    { id: 'avatar1', emoji: '\uD83E\uDD81', bg: '#e74c3c' },
+    { id: 'avatar2', emoji: '\uD83D\uDC2F', bg: '#e67e22' },
+    { id: 'avatar3', emoji: '\uD83D\uDC3B', bg: '#f39c12' },
+    { id: 'avatar4', emoji: '\uD83D\uDC3D', bg: '#2ecc71' },
+    { id: 'avatar5', emoji: '\uD83D\uDC28', bg: '#1abc9c' },
+    { id: 'avatar6', emoji: '\uD83E\uDD8A', bg: '#3498db' },
+    { id: 'avatar7', emoji: '\uD83D\uDC3A', bg: '#9b59b6' },
+    { id: 'avatar8', emoji: '\uD83E\uDD9D', bg: '#e91e63' },
+    { id: 'avatar9', emoji: '\uD83D\uDC38', bg: '#00bcd4' },
+    { id: 'avatar10', emoji: '\uD83E\uDD84', bg: '#ff5722' },
+    { id: 'avatar11', emoji: '\uD83D\uDC27', bg: '#795548' },
+    { id: 'avatar12', emoji: '\uD83E\uDD8B', bg: '#607d8b' },
 ];
 
 const modalStyles = {
@@ -150,7 +150,7 @@ const ProfileModal = ({ profile, onSave, onDelete, onClose }) => {
     const [password, setPassword] = React.useState('');
     const [pin, setPin] = React.useState(profile?.pin || '');
     const [selectedAvatar, setSelectedAvatar] = React.useState(
-        profile?.avatar || AVATAR_OPTIONS[0].id
+        (profile?.avatar && profile.avatar.replace('.png', '')) || AVATAR_OPTIONS[0].id
     );
     const [error, setError] = React.useState('');
     const [loading, setLoading] = React.useState(false);
@@ -210,7 +210,7 @@ const ProfileModal = ({ profile, onSave, onDelete, onClose }) => {
                     <h2 style={modalStyles.title}>
                         {isEditing ? 'Edit Profile' : 'Add Profile'}
                     </h2>
-                    <button style={modalStyles.closeBtn} onClick={onClose}>✕</button>
+                    <button style={modalStyles.closeBtn} onClick={onClose}>X</button>
                 </div>
 
                 {/* Avatar selector */}
@@ -276,7 +276,7 @@ const ProfileModal = ({ profile, onSave, onDelete, onClose }) => {
                         type="password"
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
-                        placeholder={isEditing ? '••••••••' : 'Enter Stremio password'}
+                        placeholder={isEditing ? '********' : 'Enter Stremio password'}
                     />
                 </div>
 
@@ -344,3 +344,4 @@ ProfileModal.propTypes = {
 
 module.exports = ProfileModal;
 module.exports.AVATAR_OPTIONS = AVATAR_OPTIONS;
+

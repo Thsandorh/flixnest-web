@@ -70,7 +70,8 @@ app.use((err, req, res, next) => {
 
 // Start server
 app.listen(HTTP_PORT, () => {
-    console.info(`✅ Stremio Profile Switcher server listening on port: ${HTTP_PORT}`);
-    console.info(`📁 Serving static files from: ${build_path}`);
-    console.info(`🔐 Encryption enabled with key length: ${process.env.ENCRYPTION_KEY.length} chars`);
+    console.info(`Stremio Profile Switcher server listening on port: ${HTTP_PORT}`);
+    console.info(`Serving static files from: ${build_path}`);
+    console.info(`Encryption enabled with key length: ${process.env.ENCRYPTION_KEY.length} chars`);
 });
+

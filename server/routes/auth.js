@@ -7,6 +7,7 @@ const path = require('path');
 const { decrypt } = require('../utils/encryption');
 
 const PROFILES_FILE = path.join(__dirname, '../data/profiles.json');
+const PROFILES_DIR = path.dirname(PROFILES_FILE);
 const STREMIO_API_URL = process.env.STREMIO_API_URL || 'https://api.strem.io/api';
 
 /**
@@ -17,8 +18,12 @@ async function loadProfiles() {
         const data = await fs.readFile(PROFILES_FILE, 'utf8');
         return JSON.parse(data);
     } catch (error) {
-        console.error('Error loading profiles:', error);
-        return [];
+        if (error.code === 'ENOENT') {
+            await fs.mkdir(PROFILES_DIR, { recursive: true });
+            await fs.writeFile(PROFILES_FILE, '[]', 'utf8');
+            return [];
+        }
+        throw error;
     }
 }
 

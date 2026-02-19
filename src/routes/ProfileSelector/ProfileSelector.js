@@ -13,6 +13,7 @@ const API_BASE = typeof window !== 'undefined' && window.location.origin;
 // Map avatar id → emoji for display
 const AVATAR_MAP = AVATAR_OPTIONS.reduce((acc, a) => {
     acc[a.id] = a;
+    acc[`${a.id}.png`] = a;
     return acc;
 }, {});
 
@@ -176,10 +177,22 @@ const ProfileSelector = () => {
         setShowProfileModal(true);
     };
 
-    const handleEditProfile = (profile, e) => {
+    const handleEditProfile = async (profile, e) => {
         e.stopPropagation();
-        setEditingProfile(profile);
-        setShowProfileModal(true);
+        try {
+            const response = await fetch(`${API_BASE}/api/profiles/${profile.id}`);
+            if (!response.ok) {
+                const errData = await response.json().catch(() => ({}));
+                throw new Error(errData.error || 'Failed to load profile details');
+            }
+
+            const details = await response.json();
+            setEditingProfile(details);
+            setShowProfileModal(true);
+        } catch (err) {
+            console.error('Error loading profile details:', err);
+            alert(`Failed to load profile details: ${err.message}`);
+        }
     };
 
     const handleProfileModalClose = () => {
