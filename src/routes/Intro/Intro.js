@@ -280,6 +280,7 @@ const Intro = ({ queryParams }) => {
                 case 'Error': {
                     if (args.source.event === 'UserAuthenticated') {
                         closeLoaderModal();
+                        dispatch({ type: 'error', error: args.error.message });
                     }
 
                     break;
