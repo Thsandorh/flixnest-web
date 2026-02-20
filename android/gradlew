@@ -33,7 +33,7 @@ while [ -h "$PROG" ] ; do
         PROG=`dirname "$PROG"`/"$link"
     fi
 done
-APP_HOME=`dirname "$PROG"`/..
+APP_HOME=`dirname "$PROG"`
 cd "$APP_HOME"
 APP_HOME=`pwd`
 APP_NAME="Gradle"
