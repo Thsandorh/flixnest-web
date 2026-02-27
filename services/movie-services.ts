@@ -214,20 +214,46 @@ const fetchTmdb = async (path: string, fallback: any, cache: RequestCache = 'no-
   const { apiKey, accessToken } = ensureTmdbAuth();
   if (!apiKey && !accessToken) return fallback;
 
-  const headers: Record<string, string> = {
-    accept: 'application/json',
+  const tryRequest = async (url: string, headers: Record<string, string>) => {
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        headers,
+        cache,
+      });
+
+      if (!response.ok) {
+        return { ok: false, status: response.status, payload: null as any };
+      }
+
+      return { ok: true, status: response.status, payload: await response.json() };
+    } catch {
+      return { ok: false, status: 0, payload: null as any };
+    }
   };
-  if (!apiKey && accessToken) {
-    headers.Authorization = `Bearer ${accessToken}`;
+
+  if (apiKey) {
+    const byApiKey = await tryRequest(buildTmdbUrl(path, apiKey), { accept: 'application/json' });
+    if (byApiKey.ok) return byApiKey.payload;
+
+    // Some keys can be stale/misconfigured in env while bearer still works.
+    if (accessToken) {
+      const byBearer = await tryRequest(`${TMDB_API_BASE}${path}`, {
+        accept: 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+      });
+      if (byBearer.ok) return byBearer.payload;
+    }
+
+    return fallback;
   }
 
-  const payload = await fetchJson(buildTmdbUrl(path, apiKey), {
-    method: 'GET',
-    headers,
-    cache,
+  const byBearerOnly = await tryRequest(`${TMDB_API_BASE}${path}`, {
+    accept: 'application/json',
+    Authorization: `Bearer ${accessToken}`,
   });
 
-  return payload ?? fallback;
+  return byBearerOnly.ok ? byBearerOnly.payload : fallback;
 };
 
 const fetchKitsu = async (path: string, fallback: any, cache: RequestCache = 'no-store') => {

@@ -12,16 +12,35 @@ const buildTmdbUrl = (path: string) => {
 
 const TMDBServices = {
   getCredits: async (movieId: number, type: string) => {
-    const headers: Record<string, string> = { accept: 'application/json' };
-    if (!TMDB_API_KEY && TMDB_ACCESS_TOKEN) {
-      headers.Authorization = `Bearer ${TMDB_ACCESS_TOKEN}`;
+    const path = `/${type}/${movieId}/credits?language=en-US`;
+
+    const tryRequest = async (url: string, headers: Record<string, string>) => {
+      try {
+        const res = await fetch(url, {
+          method: 'GET',
+          headers,
+        });
+        if (!res.ok) return null;
+        return await res.json();
+      } catch {
+        return null;
+      }
+    };
+
+    if (TMDB_API_KEY) {
+      const byApiKey = await tryRequest(buildTmdbUrl(path), { accept: 'application/json' });
+      if (byApiKey) return byApiKey;
     }
 
-    const res = await fetch(buildTmdbUrl(`/${type}/${movieId}/credits?language=en-US`), {
-      method: 'GET',
-      headers,
-    });
-    return res.json();
+    if (TMDB_ACCESS_TOKEN) {
+      const byBearer = await tryRequest(`${TMDB_API_BASE}${path}`, {
+        accept: 'application/json',
+        Authorization: `Bearer ${TMDB_ACCESS_TOKEN}`,
+      });
+      if (byBearer) return byBearer;
+    }
+
+    return { cast: [], crew: [] };
   },
 };
 
