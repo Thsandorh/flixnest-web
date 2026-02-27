@@ -73,7 +73,7 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
 
     const mapStreamsToCandidates = (streams: any[]): StreamCandidate[] =>
       streams
-        .map((stream) => {
+        .map((stream): StreamCandidate | null => {
           const candidateUrl = stream?.url
             ? String(stream.url)
             : stream?.externalUrl
@@ -100,8 +100,8 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
             isWebCompatible: !requiresBlockedHeaders,
           };
         })
-        .filter(Boolean)
-        .sort((a, b) => Number(b.isWebCompatible) - Number(a.isWebCompatible)) as StreamCandidate[];
+        .filter((candidate): candidate is StreamCandidate => candidate !== null)
+        .sort((a, b) => Number(b.isWebCompatible) - Number(a.isWebCompatible));
 
     const appendSeasonEpisode = (base: string) => {
       if (!isSeries || !querySeason || !queryEpisode) return [base];
@@ -191,7 +191,7 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
       if (!isAnimeLike && !isSeries) return [];
 
       const resolverTitle = movie.movie.origin_name || movie.movie.name;
-      if (!resolverTitle) return '';
+      if (!resolverTitle) return [];
 
       const kitsuRes = await fetch(
         `/api/anime/kitsu/search?title=${encodeURIComponent(resolverTitle)}&limit=5`,
