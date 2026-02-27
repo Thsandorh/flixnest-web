@@ -2,8 +2,19 @@ import fs from 'fs';
 import path from 'path';
 import Database from 'better-sqlite3';
 
-const DB_PATH =
-  process.env.SQLITE_DB_PATH || path.join(process.cwd(), 'data', 'moviex.sqlite');
+const resolveDbPath = () => {
+  if (process.env.SQLITE_DB_PATH) {
+    return process.env.SQLITE_DB_PATH;
+  }
+
+  if (process.env.VERCEL) {
+    return path.join('/tmp', 'moviex.sqlite');
+  }
+
+  return path.join(process.cwd(), 'data', 'moviex.sqlite');
+};
+
+const DB_PATH = resolveDbPath();
 
 type GlobalWithDb = typeof globalThis & {
   __moviexDb?: Database.Database;
@@ -76,4 +87,3 @@ export function getDb() {
 
   return globalWithDb.__moviexDb;
 }
-
