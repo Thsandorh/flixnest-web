@@ -1,10 +1,9 @@
 'use client';
 import DetailMovie from 'types/detail-movie';
 import VideoPlayer from './video-player';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { isHaveEpisodesMovie } from 'utils/movie-utils';
 import ServerSection from './server-section';
-import { useRef } from 'react';
 import ProgresswatchNotification from './progress-watch-notification';
 import { useDispatch, useSelector } from 'react-redux';
 import { setProgress } from '../../redux/slices/progress-slice';
@@ -31,28 +30,144 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
   });
   const [isShowToastProgress, setIsShowToastProgress] = useState(false);
   const [isFirstPlay, setIsFirstPlay] = useState<boolean>(true);
+  const [isUsingStremioPrimary, setIsUsingStremioPrimary] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
+  const stremioType = movie.movie.tmdb?.type === 'tv' ? 'series' : 'movie';
+  const isSeries = stremioType === 'series';
+  const isAnimeLike = (movie.movie.category || []).some((item) =>
+    String(item?.name || '')
+      .toLowerCase()
+      .includes('anime')
+  );
+
+  const resolveDefaultEpisodeLink = () => {
+    return movie.episodes?.[0]?.server_data?.[0]?.link_m3u8 || '';
+  };
+
+  const resolveFallbackEpisodeLink = (targetServerIndex: number, targetEpisodeIndex: number) => {
+    return movie.episodes?.[targetServerIndex]?.server_data?.[targetEpisodeIndex]?.link_m3u8 || '';
+  };
+
+  const fetchPrimaryStreamLink = async (targetEpisodeIndex = 0) => {
+    const tmdbId = movie.movie.tmdb?.id;
+    const queryEpisode = isSeries ? targetEpisodeIndex + 1 : undefined;
+    const querySeason = isSeries ? movie.movie.tmdb?.season || 1 : undefined;
+
+    const fetchStremioLink = async (params: Record<string, string | number | undefined>) => {
+      const searchParams = new URLSearchParams();
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && `${value}`.trim() !== '') {
+          searchParams.set(key, String(value));
+        }
+      });
+
+      const res = await fetch(`/api/streams/stremio?${searchParams.toString()}`, {
+        method: 'GET',
+        cache: 'no-store',
+      });
+      if (!res.ok) return '';
+      const data = await res.json();
+      if (data?.firstWorkingUrl) return data.firstWorkingUrl as string;
+      const firstPlayable = Array.isArray(data?.playable) ? data.playable[0] : null;
+      return firstPlayable?.url || '';
+    };
+
+    try {
+      if (tmdbId) {
+        const tmdbLink = await fetchStremioLink({
+          type: stremioType,
+          id: String(tmdbId),
+          season: querySeason,
+          episode: queryEpisode,
+        });
+        if (tmdbLink) return tmdbLink;
+      }
+
+      if (!isAnimeLike && !isSeries) return '';
+
+      const resolverTitle = movie.movie.origin_name || movie.movie.name;
+      if (!resolverTitle) return '';
+
+      const kitsuRes = await fetch(
+        `/api/anime/kitsu/search?title=${encodeURIComponent(resolverTitle)}&limit=5`,
+        { method: 'GET', cache: 'no-store' }
+      );
+      if (!kitsuRes.ok) return '';
+
+      const kitsuData = await kitsuRes.json();
+      const kitsuId = kitsuData?.kitsuId;
+      if (!kitsuId) return '';
+
+      return await fetchStremioLink({
+        type: stremioType,
+        id: String(tmdbId || kitsuId),
+        kitsuId: String(kitsuId),
+        season: querySeason,
+        episode: queryEpisode,
+      });
+    } catch {
+      return '';
+    }
+  };
+
   const handleSwitchEpisode = (index: number) => {
-    setEpisodeIndex(index);
-    setEpisodeLink(movie.episodes[serverIndex].server_data[index].link_m3u8);
-    setVideoProgress(null);
+    const applyEpisode = async () => {
+      setEpisodeIndex(index);
+      setVideoProgress(null);
+      const stremioLink = await fetchPrimaryStreamLink(index);
+      if (stremioLink) {
+        setEpisodeLink(stremioLink);
+        setIsUsingStremioPrimary(true);
+        return;
+      }
+
+      setEpisodeLink(resolveFallbackEpisodeLink(serverIndex, index));
+      setIsUsingStremioPrimary(false);
+    };
+
+    applyEpisode();
   };
 
   const handleSetServerIndex = (index: number) => {
     if (index === serverIndex) return;
 
-    setServerIndex(index);
-    setEpisodeLink(movie.episodes[serverIndex].server_data[0].link_m3u8);
-    setEpisodeIndex(0);
+    const applyServer = async () => {
+      setServerIndex(index);
+      setEpisodeIndex(0);
+      setVideoProgress(null);
+      const stremioLink = await fetchPrimaryStreamLink(0);
+      if (stremioLink) {
+        setEpisodeLink(stremioLink);
+        setIsUsingStremioPrimary(true);
+        return;
+      }
+
+      setEpisodeLink(resolveFallbackEpisodeLink(index, 0));
+      setIsUsingStremioPrimary(false);
+    };
+
+    applyServer();
   };
 
   useEffect(() => {
-    setEpisodeLink(movie.episodes[0].server_data[0].link_m3u8);
-    setEpisodeIndex(0);
+    const initEpisode = async () => {
+      // Stremio is now the primary source.
+      const stremioLink = await fetchPrimaryStreamLink();
+      if (stremioLink) {
+        setEpisodeLink(stremioLink);
+        setIsUsingStremioPrimary(true);
+      } else {
+        const defaultLink = resolveFallbackEpisodeLink(0, 0) || resolveDefaultEpisodeLink();
+        setEpisodeLink(defaultLink);
+        setIsUsingStremioPrimary(false);
+      }
+      setEpisodeIndex(0);
+    };
 
-    // restore progress watching of user authenticated
+    initEpisode();
+
     if (user) {
       restoreUserWatchProgress(user.id, movie.movie._id);
     }
@@ -62,10 +177,7 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
 
   const restoreUserWatchProgress = async (userId: string, movieId: string) => {
     const res: any = await firebaseServices.getProgressWatchOfMovie(userId, movieId);
-
-    if (!res.status) {
-      return;
-    }
+    if (!res.status) return;
 
     setPreviousWatchProgress({
       progressEpIndex: res.progressEpIndex,
@@ -73,31 +185,26 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
       progressEpLink: res.progressEpLink,
     });
 
-    setTimeout(() => {
-      setIsShowToastProgress(true);
-    }, 2000);
+    setTimeout(() => setIsShowToastProgress(true), 2000);
   };
 
-  const restoreGuestWatchProgress = (progress: any) => {
-    if (progress?.id !== movie.movie._id) return;
+  const restoreGuestWatchProgress = (guestProgress: any) => {
+    if (guestProgress?.id !== movie.movie._id) return;
 
     setPreviousWatchProgress({
-      progressEpIndex: progress.progress.episodeIndex,
-      progressTime: progress.progress.progressTime,
-      progressEpLink: progress.progress.episodeLink,
+      progressEpIndex: guestProgress.progress.episodeIndex,
+      progressTime: guestProgress.progress.progressTime,
+      progressEpLink: guestProgress.progress.episodeLink,
     });
 
-    setTimeout(() => {
-      setIsShowToastProgress(true);
-    }, 2000);
+    setTimeout(() => setIsShowToastProgress(true), 2000);
   };
 
-  const handleTrackingProgressWatch = async (e: any) => {
+  const handleTrackingProgressWatch = async () => {
     if (videoRef.current?.currentTime === 0) return;
 
-    // store data for user not authenticated
     if (!user) {
-      const progress = {
+      const guestProgress = {
         id: movie.movie._id,
         slug: movie.movie.slug,
         thumb_url: movie.movie.thumb_url,
@@ -111,12 +218,10 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
           episodeLink,
         },
       };
-
-      dispatch(setProgress(progress));
+      dispatch(setProgress(guestProgress));
       return;
     }
 
-    // store data for user authenticated
     const recentMovieData: IRecentMovie = {
       userId: user.id,
       id: movie.movie._id,
@@ -128,30 +233,20 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
       quality: movie.movie.quality,
       progressEpIndex: episodeIndex || 0,
       progressTime: videoRef.current?.currentTime || 0,
-      progressEpLink: episodeLink || movie.episodes[0].server_data[0].link_m3u8,
+      progressEpLink: episodeLink || resolveDefaultEpisodeLink(),
     };
 
-    // Convert the data into a JSON string
-    const jsonData = JSON.stringify(recentMovieData);
-
-    // Create a Blob with the correct MIME type
-    const blob = new Blob([jsonData], { type: 'application/json' });
-
-    // this route will handle store recent movie and progress of movie
+    const blob = new Blob([JSON.stringify(recentMovieData)], { type: 'application/json' });
     navigator.sendBeacon('/api/movies/store-recent-movie', blob);
   };
 
   useEffect(() => {
     window.addEventListener('beforeunload', handleTrackingProgressWatch);
-
-    return () => {
-      window.removeEventListener('beforeunload', handleTrackingProgressWatch);
-    };
+    return () => window.removeEventListener('beforeunload', handleTrackingProgressWatch);
   }, [episodeLink, user]);
 
   useEffect(() => {
     if (!videoRef.current || !isFirstPlay || !user) return;
-
     const videoElement = videoRef.current;
 
     const handleStoreRecentMovie = async () => {
@@ -165,7 +260,7 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
         quality: movie.movie.quality,
         progressEpIndex: progress.progress.episodeIndex || 0,
         progressTime: progress.progress.progressTime || 0,
-        progressEpLink: progress.progress.episodeLink || movie.episodes[0].server_data[0].link_m3u8,
+        progressEpLink: progress.progress.episodeLink || resolveDefaultEpisodeLink(),
       };
 
       await firebaseServices.storeRecentMovies(recentMovieData, user.id);
@@ -173,17 +268,14 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
     };
 
     videoElement.addEventListener('playing', handleStoreRecentMovie);
-
-    return () => {
-      videoElement.removeEventListener('playing', handleStoreRecentMovie);
-    };
+    return () => videoElement.removeEventListener('playing', handleStoreRecentMovie);
   }, [isFirstPlay, user]);
 
   const handleAcceptProgressWatch = () => {
     setEpisodeIndex(previousWatchProgress.progressEpIndex);
     setEpisodeLink(previousWatchProgress.progressEpLink);
     setVideoProgress(previousWatchProgress.progressTime);
-
+    setIsUsingStremioPrimary(false);
     setIsShowToastProgress(false);
   };
 
@@ -206,6 +298,11 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
         thumbnail={movie.movie.poster_url}
         videoProgress={videoProgress}
       />
+      {isUsingStremioPrimary && (
+        <div className="text-center text-xs lg:text-sm text-gray-400 px-4">
+          Playing via your Stremio stream source.
+        </div>
+      )}
       {movie.episodes.length > 1 && (
         <div className="text-center text-sm lg:text-base px-4">
           If playback is lagging, please choose one of the servers below
@@ -246,4 +343,3 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
     </div>
   );
 }
-
