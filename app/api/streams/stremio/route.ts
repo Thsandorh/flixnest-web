@@ -68,16 +68,21 @@ export async function GET(request: NextRequest) {
     const addonRequestUserAgent =
       process.env.STREMIO_REQUEST_USER_AGENT ||
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+    const addonOrigin = new URL(trimTrailingSlash(addonBaseUrl)).origin;
 
-    const headers: Record<string, string> = {
-      accept: 'application/json',
+    const baseHeaders: Record<string, string> = {
+      accept: 'application/json,text/plain,*/*',
       'user-agent': addonRequestUserAgent,
       'accept-language': 'en-US,en;q=0.9',
-      referer: trimTrailingSlash(addonBaseUrl),
+      'accept-encoding': 'identity',
+      'cache-control': 'no-cache',
+      pragma: 'no-cache',
+      referer: `${addonOrigin}/`,
+      origin: addonOrigin,
+      'sec-fetch-site': 'same-origin',
+      'sec-fetch-mode': 'cors',
+      'sec-fetch-dest': 'empty',
     };
-    if (token && tokenHeaderName) {
-      headers[tokenHeaderName] = token;
-    }
 
     const isSeries = type === 'series';
     const appendSeasonEpisode = (base: string) => {
@@ -129,6 +134,11 @@ export async function GET(request: NextRequest) {
       const endpoint = new URL(buildStreamEndpoint(addonBaseUrl, type, currentId));
       if (token) {
         endpoint.searchParams.set(tokenQueryParam, token);
+      }
+
+      const headers: Record<string, string> = { ...baseHeaders };
+      if (token && tokenHeaderName) {
+        headers[tokenHeaderName] = token;
       }
 
       const response = await fetch(endpoint.toString(), {
