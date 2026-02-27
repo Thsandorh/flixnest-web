@@ -33,12 +33,13 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
   const [isUsingStremioPrimary, setIsUsingStremioPrimary] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const publicAddonBaseUrl = (process.env.NEXT_PUBLIC_STREMIO_ADDON_BASE_URL || '').replace(
-    /\/+$/,
+  const publicConfiguredAddonBaseUrl = (
+    process.env.NEXT_PUBLIC_STREMIO_CONFIGURED_BASE_URL ||
+    process.env.NEXT_PUBLIC_STREMIO_ADDON_BASE_URL ||
     ''
-  );
-  const publicAddonToken = process.env.NEXT_PUBLIC_STREMIO_SUPPORTER_TOKEN || '';
-  const publicTokenQueryParam = process.env.NEXT_PUBLIC_STREMIO_TOKEN_QUERY_PARAM || 'token';
+  )
+    .replace(/\/manifest\.json$/i, '')
+    .replace(/\/+$/, '');
 
   const stremioType = movie.movie.tmdb?.type === 'tv' ? 'series' : 'movie';
   const isSeries = stremioType === 'series';
@@ -77,7 +78,7 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
     };
 
     const fetchStremioLink = async (params: Record<string, string | number | undefined>) => {
-      if (!publicAddonBaseUrl) return '';
+      if (!publicConfiguredAddonBaseUrl) return '';
 
       const rawId = String(params.id || '').trim();
       const imdbId = String(params.imdbId || '').trim();
@@ -121,13 +122,10 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
 
       for (const currentId of idCandidates) {
         const endpoint = new URL(
-          `${publicAddonBaseUrl}/stream/${encodeURIComponent(stremioType)}/${encodeURIComponent(
-            currentId
-          )}.json`
+          `${publicConfiguredAddonBaseUrl}/stream/${encodeURIComponent(
+            stremioType
+          )}/${encodeURIComponent(currentId)}.json`
         );
-        if (publicAddonToken) {
-          endpoint.searchParams.set(publicTokenQueryParam, publicAddonToken);
-        }
 
         const res = await fetch(endpoint.toString(), {
           method: 'GET',
