@@ -1,56 +1,24 @@
-# Stremio - Freedom to Stream
+<h1 align="center">
+   MovieX - An Online Movie Streaming Platform
+</h1>
 
-[![Build](https://github.com/Stremio/stremio-web/actions/workflows/build.yml/badge.svg)](https://github.com/Stremio/stremio-web/actions/workflows/build.yml)
-[![Github Page](https://img.shields.io/website?label=Page&logo=github&up_message=online&down_message=offline&url=https%3A%2F%2Fstremio.github.io%2Fstremio-web%2F)](https://stremio.github.io/stremio-web/development)
+This project is a Next.js-based online movie streaming platform that allows users to watch movies, select episodes, and personalize their viewing experience through a secure login system. The platform features an intuitive user interface, enabling seamless navigation and access to a wide variety of movies and shows. Users can easily track their favorite content and enjoy a tailored experience based on their preferences.
 
-Stremio is a modern media center that's a one-stop solution for your video entertainment. You discover, watch and organize video content from easy to install addons.
+## Features
+- **Movie Streaming:** Seamless streaming of a wide variety of movies and shows.
+- **Episode Selection:** Users can easily choose and navigate between different episodes.
+- **Movie Search:** An intuitive search function to quickly find desired movies or series.
+- **User Registration and Login:** A secure system that allows users to create accounts and log in.
+- **Personalized Experience:** Users can add movies to their favorites list and save their viewing progress, with a complete history of watched content.
 
-## Build
-
-### Prerequisites
-
-* Node.js 12 or higher
-* [pnpm](https://pnpm.io/installation) 10 or higher
-
-### Install dependencies
-
-```bash
-pnpm install
-```
-
-### Start development server
-
-```bash
-pnpm start
-```
-
-### Production build
-
-```bash
-pnpm run build
-```
-
-### Run with Docker
-
-```bash
-docker build -t stremio-web .
-docker run -p 8080:8080 stremio-web
-```
-
-## Screenshots
-
-### Board
-
-![Board](/assets/screenshots/board.png)
-
-### Discover
-
-![Discover](/assets/screenshots/discover.png)
-
-### Meta Details
-
-![Meta Details](/assets/screenshots/metadetails.png)
-
-## License
-
-Stremio is copyright 2017-2023 Smart code and available under GPLv2 license. See the [LICENSE](/LICENSE.md) file in the project for more information.
+<h1 align="center">
+  Tech Stack
+</h1>
+<div align="center">
+  <img alt="Nextjs" src="https://www.drupal.org/files/project-images/nextjs-icon-dark-background.png" height="75" />
+  <img alt="React" src="https://user-images.githubusercontent.com/42357900/218828330-592fc93d-d58f-4c78-95dd-4c48967a1619.png" height="75" />
+  <img alt="Tailwind" src="https://user-images.githubusercontent.com/42357900/218828205-2228cc0e-8cdc-4f6a-9dd8-a5793dd8ffe9.svg" width="75" />
+  <img alt="SQLite" src="https://www.sqlite.org/images/sqlite370_banner.svg" width="90" />
+  <img alt="Tailwind" src="https://react-hook-form.com/images/logo/react-hook-form-logo-only.png" width="75" />
+  <img alt="Vercel" src="https://user-images.githubusercontent.com/42357900/219872747-281e8987-9cbd-4cd9-b068-f0e8e23ad2bf.png" height="75" />
+</div>
