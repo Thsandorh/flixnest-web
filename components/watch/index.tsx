@@ -88,8 +88,11 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
 
       const candidatesRaw: string[] = [];
       if (rawId) {
-        candidatesRaw.push(...appendSeasonEpisode(rawId));
-        candidatesRaw.push(...appendSeasonEpisode(`tmdb:${rawId}`));
+        if (rawId.startsWith('tt') || rawId.includes(':')) {
+          candidatesRaw.push(...appendSeasonEpisode(rawId));
+        } else {
+          candidatesRaw.push(...appendSeasonEpisode(`tmdb:${rawId}`));
+        }
       }
       if (imdbId) {
         candidatesRaw.push(...appendSeasonEpisode(imdbId));
