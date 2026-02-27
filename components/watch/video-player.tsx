@@ -1,7 +1,8 @@
-import React, { useRef, useEffect, forwardRef, useState } from 'react';
+import React, { useRef, useEffect, forwardRef, useState, useCallback } from 'react';
 import Hls from 'hls.js';
 import { FaPlay } from 'react-icons/fa';
 import LoadingSpinnerVideoPlayer from '../loading/loading-spiner-video-player';
+import Image from 'next/image';
 
 type VideoPlayerProps = {
   videoUrl: string;
@@ -13,11 +14,21 @@ const VideoPlayer = forwardRef<HTMLVideoElement, VideoPlayerProps>(
   ({ videoUrl, thumbnail, videoProgress }, videoRef) => {
     const overlay = useRef<HTMLDivElement | null>(null);
     const [isCanPlay, setIsCanPlay] = useState<boolean>(false);
+    const resolvedVideoRef = videoRef && 'current' in videoRef ? videoRef : null;
+
+    const handleCanPlayThrough = useCallback((video: HTMLVideoElement | null) => {
+      setIsCanPlay(true);
+      if (video && videoProgress) {
+        video.play();
+        overlay.current?.classList.add('hidden');
+      }
+    }, [videoProgress]);
 
     useEffect(() => {
       if (!videoUrl) return;
 
-      const video = videoRef && 'current' in videoRef ? videoRef.current : null;
+      const video = resolvedVideoRef?.current ?? null;
+      const currentOverlay = overlay.current;
 
       if (video) {
         if (Hls.isSupported()) {
@@ -41,44 +52,32 @@ const VideoPlayer = forwardRef<HTMLVideoElement, VideoPlayerProps>(
           video.load();
         }
 
-        overlay.current?.classList.remove('hidden');
+        currentOverlay?.classList.remove('hidden');
       };
-    }, [videoUrl, videoProgress]);
-
-    const handleCanPlayThrough = (video: any) => {
-      setIsCanPlay(true);
-
-      if (videoProgress) {
-        video.play();
-        overlay.current?.classList.add('hidden');
-      }
-    };
+    }, [videoUrl, videoProgress, resolvedVideoRef]);
 
     const handlePlayVideo = () => {
-      if (videoRef && 'current' in videoRef) videoRef.current?.play();
+      resolvedVideoRef?.current?.play();
       overlay.current?.classList.add('hidden');
     };
 
     useEffect(() => {
-      if (videoRef && 'current' in videoRef) {
-        videoRef.current?.addEventListener('canplaythrough', () =>
-          handleCanPlayThrough(videoRef.current)
-        );
-      }
+      const video = resolvedVideoRef?.current ?? null;
+      if (!video) return;
+
+      const onCanPlayThrough = () => handleCanPlayThrough(video);
+      video.addEventListener('canplaythrough', onCanPlayThrough);
 
       return () => {
-        if (videoRef && 'current' in videoRef)
-          videoRef.current?.addEventListener('canplaythrough', () =>
-            handleCanPlayThrough(videoRef.current)
-          );
+        video.removeEventListener('canplaythrough', onCanPlayThrough);
       };
-    }, [videoProgress]);
+    }, [handleCanPlayThrough, resolvedVideoRef]);
 
     return (
       <div className="relative w-full h-[34rem]">
         <video ref={videoRef} controls style={{ width: '100%', height: '100%' }} />
         <div ref={overlay} className="absolute inset-0 bg-black flex items-center justify-center">
-          <img src={thumbnail} alt="" className="h-full object-center object-cover" />
+          <Image src={thumbnail} alt="" fill className="object-center object-cover" unoptimized />
           {isCanPlay ? (
             <FaPlay
               className="absolute cursor-pointer z-10 hover:scale-125 transition-all duration-200"
