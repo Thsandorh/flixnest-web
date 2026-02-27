@@ -7,6 +7,7 @@ import BtnAddToCollection from '../buttons/btn-add-to-collection';
 import Link from 'next/link';
 import Image from 'next/image';
 import MovieImage from 'types/movie-image';
+import resolveImageUrl from 'utils/image-url';
 
 export default function MoviePage({
   movie,
@@ -23,14 +24,14 @@ export default function MoviePage({
       <div className="hidden lg:block">
         <div
           className="relative w-full h-[37rem] bg-no-repeat bg-cover flex items-end justify-center"
-          style={{ backgroundImage: `url(${movie.movie.poster_url})` }}
+          style={{ backgroundImage: `url(${resolveImageUrl(movie.movie.poster_url)})` }}
         >
           <div className="bg-black h-full w-full opacity-65 absolute inset-0"></div>
           <div className="container-wrapper-movie relative flex justify-end">
             <div className="w-1/4 absolute left-0 top-0">
               <div className="relative w-full aspect-[2/3]">
                 <Image
-                  src={movie.movie.thumb_url}
+                  src={resolveImageUrl(movie.movie.thumb_url)}
                   alt={movie.movie.name}
                   fill
                   className="object-cover shadow-custom"
@@ -97,7 +98,7 @@ export default function MoviePage({
         {/* Hero Section */}
         <div
           className="relative w-full h-[50vh] bg-no-repeat bg-cover bg-center"
-          style={{ backgroundImage: `url(${movie.movie.poster_url})` }}
+          style={{ backgroundImage: `url(${resolveImageUrl(movie.movie.poster_url)})` }}
         >
           <div className="absolute inset-0 bg-black/60"></div>
           <div className="absolute inset-0 bg-gradient-to-t from-black via-black/50 to-transparent"></div>
@@ -108,7 +109,7 @@ export default function MoviePage({
               {/* Movie Poster */}
               <div className="relative w-24 h-36 flex-shrink-0">
                 <Image
-                  src={movie.movie.thumb_url}
+                  src={resolveImageUrl(movie.movie.thumb_url)}
                   alt={movie.movie.name}
                   fill
                   className="object-cover rounded-lg shadow-lg"

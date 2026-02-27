@@ -1,7 +1,7 @@
 import DetailMovie from "types/detail-movie";
 
 export function isHaveEpisodesMovie(movie: DetailMovie) {
-    return movie.movie.type !== 'single' && movie.episodes[0].server_data.length > 1;
+    return movie.movie.type !== 'single' && (movie.episodes?.[0]?.server_data?.length || 0) > 1;
 }
 
 export function isNotNull(value: string) {

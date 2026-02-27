@@ -1,6 +1,7 @@
 import Actor from 'types/actor';
 import ActorImgDefault from '../../public/default-actor-img.jpg';
 import Image from 'next/image';
+import { tmdbImageUrl } from 'utils/tmdb-image-url';
 
 export default function ActorItem({ actor }: { actor: Actor | string }) {
   // Kiểm tra nếu actor là chuỗi (chỉ tên diễn viên)
@@ -28,7 +29,7 @@ export default function ActorItem({ actor }: { actor: Actor | string }) {
         <Image
           src={
             actor.profile_path
-              ? `${process.env.NEXT_PUBLIC_TMDB_IMG_DOMAIN}/t/p/w300${actor.profile_path}`
+              ? tmdbImageUrl(actor.profile_path, 'w300')
               : ActorImgDefault
           }
           alt={actor.name}

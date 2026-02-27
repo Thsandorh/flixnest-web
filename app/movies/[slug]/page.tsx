@@ -11,7 +11,7 @@ let movie: DetailMovie;
 export async function generateMetadata({ params }: PageParams): Promise<Metadata> {
   try {
     const res = await MovieServices.getDetailMovie(params.slug);
-    if (!res.status) throw new Error('');
+    if (!res?.movie?.name) throw new Error('');
     movie = res;
   } catch (error) {
     redirect('/');

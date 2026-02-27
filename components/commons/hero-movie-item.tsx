@@ -6,6 +6,7 @@ import TMDBLogo from '../logos/TMDB-Logo';
 import Category from 'types/category';
 import { GoDotFill } from 'react-icons/go';
 import Link from 'next/link';
+import resolveImageUrl from 'utils/image-url';
 
 export default function HeroMovieItem({ detailMovie }: { detailMovie: DetailMovie }) {
   const movieCategory = detailMovie.movie.category.map((item: Category, index) => (
@@ -18,7 +19,7 @@ export default function HeroMovieItem({ detailMovie }: { detailMovie: DetailMovi
   return (
     <div
       className="container-wrapper relative w-full h-screen bg-cover bg-center"
-      style={{ backgroundImage: `url(${detailMovie.movie.poster_url})` }}
+      style={{ backgroundImage: `url(${resolveImageUrl(detailMovie.movie.poster_url)})` }}
     >
       <div className="absolute inset-0 bg-black opacity-45"></div>
       <div className="absolute inset-0 bg-gradient-to-r from-black to-50%"></div>
