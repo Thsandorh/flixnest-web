@@ -11,6 +11,13 @@ import CommentSection from '../comment';
 import { IRecentMovie } from 'types/recent-movie';
 import firebaseServices from 'services/firebase-services';
 
+type StreamCandidate = {
+  url: string;
+  name: string;
+  title: string;
+  isWebCompatible: boolean;
+};
+
 export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
   // episodes[serverIndex]: selected server
   // server_data[episodeIndex] || server_data[index]: episode
@@ -31,6 +38,8 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
   const [isShowToastProgress, setIsShowToastProgress] = useState(false);
   const [isFirstPlay, setIsFirstPlay] = useState<boolean>(true);
   const [isUsingStremioPrimary, setIsUsingStremioPrimary] = useState(false);
+  const [streamCandidates, setStreamCandidates] = useState<StreamCandidate[]>([]);
+  const [activeStreamIndex, setActiveStreamIndex] = useState(0);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const publicConfiguredAddonBaseUrl = (
@@ -57,28 +66,50 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
     return movie.episodes?.[targetServerIndex]?.server_data?.[targetEpisodeIndex]?.link_m3u8 || '';
   };
 
-  const fetchPrimaryStreamLink = async (targetEpisodeIndex = 0) => {
+  const fetchPrimaryStreams = async (targetEpisodeIndex = 0) => {
     const tmdbId = movie.movie.tmdb?.id;
     const queryEpisode = isSeries ? targetEpisodeIndex + 1 : undefined;
     const querySeason = isSeries ? movie.movie.tmdb?.season || 1 : undefined;
 
-    const mapStreamsToUrls = (streams: any[]) =>
+    const mapStreamsToCandidates = (streams: any[]): StreamCandidate[] =>
       streams
         .map((stream) => {
-          if (stream?.url) return String(stream.url);
-          if (stream?.externalUrl) return String(stream.externalUrl);
-          if (stream?.ytId) return `https://www.youtube.com/watch?v=${stream.ytId}`;
-          return '';
+          const candidateUrl = stream?.url
+            ? String(stream.url)
+            : stream?.externalUrl
+            ? String(stream.externalUrl)
+            : stream?.ytId
+            ? `https://www.youtube.com/watch?v=${stream.ytId}`
+            : '';
+          if (!candidateUrl) return null;
+
+          const requestHeaders = stream?.behaviorHints?.proxyHeaders?.request;
+          const requiresBlockedHeaders =
+            !!requestHeaders &&
+            (requestHeaders.Referer ||
+              requestHeaders.referer ||
+              requestHeaders.Origin ||
+              requestHeaders.origin ||
+              requestHeaders['User-Agent'] ||
+              requestHeaders['user-agent']);
+
+          return {
+            url: candidateUrl,
+            name: String(stream?.name || ''),
+            title: String(stream?.title || ''),
+            isWebCompatible: !requiresBlockedHeaders,
+          };
         })
-        .filter(Boolean);
+        .filter(Boolean)
+        .sort((a, b) => Number(b.isWebCompatible) - Number(a.isWebCompatible)) as StreamCandidate[];
 
     const appendSeasonEpisode = (base: string) => {
       if (!isSeries || !querySeason || !queryEpisode) return [base];
       return [base, `${base}:${querySeason}:${queryEpisode}`];
     };
 
-    const fetchStremioLink = async (params: Record<string, string | number | undefined>) => {
-      if (!publicConfiguredAddonBaseUrl) return '';
+    const fetchStremioStreams = async (params: Record<string, string | number | undefined>) => {
+      if (!publicConfiguredAddonBaseUrl) return [];
 
       const rawId = String(params.id || '').trim();
       const imdbId = String(params.imdbId || '').trim();
@@ -137,27 +168,27 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
         if (!res.ok) continue;
 
         const data = await res.json();
-        const urls = mapStreamsToUrls(Array.isArray(data?.streams) ? data.streams : []);
-        if (urls.length > 0) {
-          return urls[0];
+        const candidates = mapStreamsToCandidates(Array.isArray(data?.streams) ? data.streams : []);
+        if (candidates.length > 0) {
+          return candidates;
         }
       }
 
-      return '';
+      return [];
     };
 
     try {
       if (tmdbId) {
-        const tmdbLink = await fetchStremioLink({
+        const tmdbStreams = await fetchStremioStreams({
           type: stremioType,
           id: String(tmdbId),
           season: querySeason,
           episode: queryEpisode,
         });
-        if (tmdbLink) return tmdbLink;
+        if (tmdbStreams.length > 0) return tmdbStreams;
       }
 
-      if (!isAnimeLike && !isSeries) return '';
+      if (!isAnimeLike && !isSeries) return [];
 
       const resolverTitle = movie.movie.origin_name || movie.movie.name;
       if (!resolverTitle) return '';
@@ -166,13 +197,13 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
         `/api/anime/kitsu/search?title=${encodeURIComponent(resolverTitle)}&limit=5`,
         { method: 'GET', cache: 'no-store' }
       );
-      if (!kitsuRes.ok) return '';
+      if (!kitsuRes.ok) return [];
 
       const kitsuData = await kitsuRes.json();
       const kitsuId = kitsuData?.kitsuId;
-      if (!kitsuId) return '';
+      if (!kitsuId) return [];
 
-      return await fetchStremioLink({
+      return await fetchStremioStreams({
         type: stremioType,
         id: String(tmdbId || kitsuId),
         kitsuId: String(kitsuId),
@@ -180,21 +211,29 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
         episode: queryEpisode,
       });
     } catch {
-      return '';
+      return [];
     }
+  };
+
+  const applyPrimaryStreams = (candidates: StreamCandidate[]) => {
+    setStreamCandidates(candidates);
+    setActiveStreamIndex(0);
+    setEpisodeLink(candidates[0]?.url || '');
   };
 
   const handleSwitchEpisode = (index: number) => {
     const applyEpisode = async () => {
       setEpisodeIndex(index);
       setVideoProgress(null);
-      const stremioLink = await fetchPrimaryStreamLink(index);
-      if (stremioLink) {
-        setEpisodeLink(stremioLink);
+      const stremioStreams = await fetchPrimaryStreams(index);
+      if (stremioStreams.length > 0) {
+        applyPrimaryStreams(stremioStreams);
         setIsUsingStremioPrimary(true);
         return;
       }
 
+      setStreamCandidates([]);
+      setActiveStreamIndex(0);
       setEpisodeLink(resolveFallbackEpisodeLink(serverIndex, index));
       setIsUsingStremioPrimary(false);
     };
@@ -209,13 +248,15 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
       setServerIndex(index);
       setEpisodeIndex(0);
       setVideoProgress(null);
-      const stremioLink = await fetchPrimaryStreamLink(0);
-      if (stremioLink) {
-        setEpisodeLink(stremioLink);
+      const stremioStreams = await fetchPrimaryStreams(0);
+      if (stremioStreams.length > 0) {
+        applyPrimaryStreams(stremioStreams);
         setIsUsingStremioPrimary(true);
         return;
       }
 
+      setStreamCandidates([]);
+      setActiveStreamIndex(0);
       setEpisodeLink(resolveFallbackEpisodeLink(index, 0));
       setIsUsingStremioPrimary(false);
     };
@@ -226,12 +267,14 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
   useEffect(() => {
     const initEpisode = async () => {
       // Stremio is now the primary source.
-      const stremioLink = await fetchPrimaryStreamLink();
-      if (stremioLink) {
-        setEpisodeLink(stremioLink);
+      const stremioStreams = await fetchPrimaryStreams();
+      if (stremioStreams.length > 0) {
+        applyPrimaryStreams(stremioStreams);
         setIsUsingStremioPrimary(true);
       } else {
         const defaultLink = resolveFallbackEpisodeLink(0, 0) || resolveDefaultEpisodeLink();
+        setStreamCandidates([]);
+        setActiveStreamIndex(0);
         setEpisodeLink(defaultLink);
         setIsUsingStremioPrimary(false);
       }
@@ -355,6 +398,17 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
     setIsShowToastProgress(false);
   };
 
+  const handlePlaybackError = () => {
+    if (!isUsingStremioPrimary) return;
+
+    const nextIndex = activeStreamIndex + 1;
+    const nextCandidate = streamCandidates[nextIndex];
+    if (!nextCandidate) return;
+
+    setActiveStreamIndex(nextIndex);
+    setEpisodeLink(nextCandidate.url);
+  };
+
   return (
     <div className="pt-20 lg:pt-[3.75rem] space-y-6 lg:space-y-10">
       <ProgresswatchNotification
@@ -369,6 +423,7 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
         videoUrl={episodeLink}
         thumbnail={movie.movie.poster_url}
         videoProgress={videoProgress}
+        onPlaybackError={handlePlaybackError}
       />
       {isUsingStremioPrimary && (
         <div className="text-center text-xs lg:text-sm text-gray-400 px-4">

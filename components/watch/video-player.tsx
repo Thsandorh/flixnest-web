@@ -8,11 +8,13 @@ type VideoPlayerProps = {
   videoUrl: string;
   thumbnail: string;
   videoProgress: number | null;
+  onPlaybackError?: () => void;
 };
 
 const VideoPlayer = forwardRef<HTMLVideoElement, VideoPlayerProps>(
-  ({ videoUrl, thumbnail, videoProgress }, videoRef) => {
+  ({ videoUrl, thumbnail, videoProgress, onPlaybackError }, videoRef) => {
     const overlay = useRef<HTMLDivElement | null>(null);
+    const hlsRef = useRef<Hls | null>(null);
     const [isCanPlay, setIsCanPlay] = useState<boolean>(false);
     const resolvedVideoRef = videoRef && 'current' in videoRef ? videoRef : null;
 
@@ -29,12 +31,19 @@ const VideoPlayer = forwardRef<HTMLVideoElement, VideoPlayerProps>(
 
       const video = resolvedVideoRef?.current ?? null;
       const currentOverlay = overlay.current;
+      setIsCanPlay(false);
 
       if (video) {
         if (Hls.isSupported()) {
           const hls = new Hls();
+          hlsRef.current = hls;
           hls.loadSource(videoUrl);
           hls.attachMedia(video);
+          hls.on(Hls.Events.ERROR, (_event, data) => {
+            if (data?.fatal) {
+              onPlaybackError?.();
+            }
+          });
         } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
           // For Safari and other browsers that support HLS natively
           video.src = videoUrl;
@@ -46,6 +55,8 @@ const VideoPlayer = forwardRef<HTMLVideoElement, VideoPlayerProps>(
       }
 
       return () => {
+        hlsRef.current?.destroy();
+        hlsRef.current = null;
         if (video && video.src) {
           video.pause();
           video.removeAttribute('src'); // Stop the video stream
@@ -54,7 +65,7 @@ const VideoPlayer = forwardRef<HTMLVideoElement, VideoPlayerProps>(
 
         currentOverlay?.classList.remove('hidden');
       };
-    }, [videoUrl, videoProgress, resolvedVideoRef]);
+    }, [onPlaybackError, videoUrl, videoProgress, resolvedVideoRef]);
 
     const handlePlayVideo = () => {
       resolvedVideoRef?.current?.play();
@@ -66,12 +77,15 @@ const VideoPlayer = forwardRef<HTMLVideoElement, VideoPlayerProps>(
       if (!video) return;
 
       const onCanPlayThrough = () => handleCanPlayThrough(video);
+      const onError = () => onPlaybackError?.();
       video.addEventListener('canplaythrough', onCanPlayThrough);
+      video.addEventListener('error', onError);
 
       return () => {
         video.removeEventListener('canplaythrough', onCanPlayThrough);
+        video.removeEventListener('error', onError);
       };
-    }, [handleCanPlayThrough, resolvedVideoRef]);
+    }, [handleCanPlayThrough, onPlaybackError, resolvedVideoRef]);
 
     return (
       <div className="relative w-full h-[34rem]">
