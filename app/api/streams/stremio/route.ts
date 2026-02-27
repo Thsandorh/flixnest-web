@@ -65,8 +65,16 @@ export async function GET(request: NextRequest) {
     const token = process.env.STREMIO_SUPPORTER_TOKEN;
     const tokenQueryParam = process.env.STREMIO_TOKEN_QUERY_PARAM || 'token';
     const tokenHeaderName = process.env.STREMIO_TOKEN_HEADER_NAME;
+    const addonRequestUserAgent =
+      process.env.STREMIO_REQUEST_USER_AGENT ||
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
 
-    const headers: Record<string, string> = { accept: 'application/json' };
+    const headers: Record<string, string> = {
+      accept: 'application/json',
+      'user-agent': addonRequestUserAgent,
+      'accept-language': 'en-US,en;q=0.9',
+      referer: trimTrailingSlash(addonBaseUrl),
+    };
     if (token && tokenHeaderName) {
       headers[tokenHeaderName] = token;
     }
@@ -127,6 +135,7 @@ export async function GET(request: NextRequest) {
         method: 'GET',
         headers,
         cache: 'no-store',
+        redirect: 'follow',
       });
 
       if (!response.ok) {
