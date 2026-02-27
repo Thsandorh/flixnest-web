@@ -33,6 +33,12 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
   const [isUsingStremioPrimary, setIsUsingStremioPrimary] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const publicAddonBaseUrl = (process.env.NEXT_PUBLIC_STREMIO_ADDON_BASE_URL || '').replace(
+    /\/+$/,
+    ''
+  );
+  const publicAddonToken = process.env.NEXT_PUBLIC_STREMIO_SUPPORTER_TOKEN || '';
+  const publicTokenQueryParam = process.env.NEXT_PUBLIC_STREMIO_TOKEN_QUERY_PARAM || 'token';
 
   const stremioType = movie.movie.tmdb?.type === 'tv' ? 'series' : 'movie';
   const isSeries = stremioType === 'series';
@@ -55,23 +61,88 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
     const queryEpisode = isSeries ? targetEpisodeIndex + 1 : undefined;
     const querySeason = isSeries ? movie.movie.tmdb?.season || 1 : undefined;
 
-    const fetchStremioLink = async (params: Record<string, string | number | undefined>) => {
-      const searchParams = new URLSearchParams();
-      Object.entries(params).forEach(([key, value]) => {
-        if (value !== undefined && value !== null && `${value}`.trim() !== '') {
-          searchParams.set(key, String(value));
-        }
-      });
+    const mapStreamsToUrls = (streams: any[]) =>
+      streams
+        .map((stream) => {
+          if (stream?.url) return String(stream.url);
+          if (stream?.externalUrl) return String(stream.externalUrl);
+          if (stream?.ytId) return `https://www.youtube.com/watch?v=${stream.ytId}`;
+          return '';
+        })
+        .filter(Boolean);
 
-      const res = await fetch(`/api/streams/stremio?${searchParams.toString()}`, {
-        method: 'GET',
-        cache: 'no-store',
-      });
-      if (!res.ok) return '';
-      const data = await res.json();
-      if (data?.firstWorkingUrl) return data.firstWorkingUrl as string;
-      const firstPlayable = Array.isArray(data?.playable) ? data.playable[0] : null;
-      return firstPlayable?.url || '';
+    const appendSeasonEpisode = (base: string) => {
+      if (!isSeries || !querySeason || !queryEpisode) return [base];
+      return [base, `${base}:${querySeason}:${queryEpisode}`];
+    };
+
+    const fetchStremioLink = async (params: Record<string, string | number | undefined>) => {
+      if (!publicAddonBaseUrl) return '';
+
+      const rawId = String(params.id || '').trim();
+      const imdbId = String(params.imdbId || '').trim();
+      const tmdbCandidate = String(params.tmdbId || params.id || '').trim();
+      const kitsuCandidate = String(params.kitsuId || '').trim();
+      const aniwaysCandidate = String(params.aniwaysId || '').trim();
+
+      const candidatesRaw: string[] = [];
+      if (rawId) {
+        candidatesRaw.push(...appendSeasonEpisode(rawId));
+        candidatesRaw.push(...appendSeasonEpisode(`tmdb:${rawId}`));
+      }
+      if (imdbId) {
+        candidatesRaw.push(...appendSeasonEpisode(imdbId));
+      }
+      if (tmdbCandidate) {
+        candidatesRaw.push(...appendSeasonEpisode(`tmdb:${tmdbCandidate}`));
+      }
+      if (kitsuCandidate) {
+        if (isSeries && queryEpisode) {
+          candidatesRaw.push(`kitsu:${kitsuCandidate}:${queryEpisode}`);
+          if (querySeason) {
+            candidatesRaw.push(`kitsu:${kitsuCandidate}:${querySeason}:${queryEpisode}`);
+          }
+        } else {
+          candidatesRaw.push(`kitsu:${kitsuCandidate}`);
+        }
+      }
+      if (aniwaysCandidate) {
+        if (isSeries && queryEpisode) {
+          candidatesRaw.push(`aniways:${aniwaysCandidate}:${queryEpisode}`);
+          if (querySeason) {
+            candidatesRaw.push(`aniways:${aniwaysCandidate}:${querySeason}:${queryEpisode}`);
+          }
+        } else {
+          candidatesRaw.push(`aniways:${aniwaysCandidate}`);
+        }
+      }
+
+      const idCandidates = Array.from(new Set(candidatesRaw.filter(Boolean)));
+
+      for (const currentId of idCandidates) {
+        const endpoint = new URL(
+          `${publicAddonBaseUrl}/stream/${encodeURIComponent(stremioType)}/${encodeURIComponent(
+            currentId
+          )}.json`
+        );
+        if (publicAddonToken) {
+          endpoint.searchParams.set(publicTokenQueryParam, publicAddonToken);
+        }
+
+        const res = await fetch(endpoint.toString(), {
+          method: 'GET',
+          cache: 'no-store',
+        });
+        if (!res.ok) continue;
+
+        const data = await res.json();
+        const urls = mapStreamsToUrls(Array.isArray(data?.streams) ? data.streams : []);
+        if (urls.length > 0) {
+          return urls[0];
+        }
+      }
+
+      return '';
     };
 
     try {
