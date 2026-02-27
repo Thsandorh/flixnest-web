@@ -35,6 +35,10 @@ const toPlaybackUrl = (candidateUrl: string) => {
   return `/api/media/playlist?url=${encodeURIComponent(candidateUrl)}`;
 };
 
+const SERVICE_RETRY_DELAY_MS = 5_000;
+
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
   const STREAM_CACHE_TTL_MS = 60_000;
   // episodes[serverIndex]: selected server
@@ -215,10 +219,17 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
           )}/${encodeURIComponent(currentId)}.json`
         );
 
-        const res = await fetch(endpoint.toString(), {
+        let res = await fetch(endpoint.toString(), {
           method: 'GET',
           cache: 'no-store',
         });
+        if (res.status === 503) {
+          await wait(SERVICE_RETRY_DELAY_MS);
+          res = await fetch(endpoint.toString(), {
+            method: 'GET',
+            cache: 'no-store',
+          });
+        }
         if (!res.ok) continue;
 
         const data = await res.json();

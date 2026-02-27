@@ -1,5 +1,7 @@
 import { NextRequest } from 'next/server';
 
+const SERVICE_RETRY_DELAY_MS = 5_000;
+
 function buildProxyUrl(request: NextRequest, targetUrl: string) {
   const proxyUrl = new URL('/api/media/playlist', request.nextUrl.origin);
   proxyUrl.searchParams.set('url', targetUrl);
@@ -96,6 +98,17 @@ function rewritePlaylist(content: string, playlistUrl: string, request: NextRequ
   return rewritten.join('\n');
 }
 
+async function fetchWith503Retry(input: string, init: RequestInit) {
+  let response = await fetch(input, init);
+  if (response.status !== 503) {
+    return response;
+  }
+
+  await new Promise((resolve) => setTimeout(resolve, SERVICE_RETRY_DELAY_MS));
+  response = await fetch(input, init);
+  return response;
+}
+
 export async function GET(request: NextRequest) {
   const upstreamUrl = request.nextUrl.searchParams.get('url');
   if (!upstreamUrl) {
@@ -113,7 +126,7 @@ export async function GET(request: NextRequest) {
     return new Response('Unsupported protocol', { status: 400 });
   }
 
-  const upstreamResponse = await fetch(parsedUrl.toString(), {
+  const upstreamResponse = await fetchWith503Retry(parsedUrl.toString(), {
     method: 'GET',
     headers: {
       'User-Agent':

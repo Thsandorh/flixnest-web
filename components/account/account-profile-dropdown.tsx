@@ -74,7 +74,7 @@ export default function AccountProfileDropdown({ authenticatedUser }: { authenti
           }
         >
           <IoBookmark size={18} />
-          <span className="text-sm font-medium">Bo suu tap</span>
+          <span className="text-sm font-medium">Collection</span>
         </Link>
 
         <Link
@@ -119,4 +119,3 @@ export default function AccountProfileDropdown({ authenticatedUser }: { authenti
     </div>
   );
 }
-

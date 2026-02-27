@@ -310,7 +310,7 @@ const buildEpisodeList = (count: number) => {
   const safeCount = Math.min(Math.max(Number(count || 1), 1), 200);
   return [
     {
-      server_name: 'Flix Streams',
+      server_name: 'FlixNest',
       server_data: Array.from({ length: safeCount }, (_, index) => ({
         name: String(index + 1),
         slug: `episode-${index + 1}`,
@@ -324,7 +324,7 @@ const buildEpisodeList = (count: number) => {
 
 const buildSingleEpisodeList = () => [
   {
-    server_name: 'Flix Streams',
+    server_name: 'FlixNest',
     server_data: [
       {
         name: 'Full',

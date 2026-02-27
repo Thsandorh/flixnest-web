@@ -106,10 +106,9 @@ export default function BtnAddToCollection({ variant, detailMovie }: BtnAddToCol
       ) : (
         <>
           {isExistedInCollection ? <TiTick size={18} /> : <FaPlus size={18} />}
-          <span className="block leading-4 font-semibold">Bo suu tap</span>
+          <span className="block leading-4 font-semibold">Collection</span>
         </>
       )}
     </button>
   );
 }
-
