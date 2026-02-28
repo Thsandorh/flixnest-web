@@ -1,7 +1,5 @@
 'use client';
 import React, { useState, useEffect } from 'react';
-import logo from '../../public/logo.png';
-import Image from 'next/image';
 import { IoSearch, IoMenu, IoClose, IoChevronDown, IoChevronUp } from 'react-icons/io5';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -77,7 +75,7 @@ export default function HeaderMobile({
 
           {/* Logo */}
           <Link className="block" href="/" onClick={closeMobileMenu}>
-            <Image src={logo} alt="Movie Web Logo" className="w-24 h-auto" />
+            <span className="text-xl font-extrabold tracking-tight text-custome-red">FLIXNEST</span>
           </Link>
 
           {/* Search Icon */}
@@ -100,7 +98,7 @@ export default function HeaderMobile({
           >
             {/* Menu Header */}
             <div className="flex items-center justify-between p-4 border-b border-gray-800">
-              <Image src={logo} alt="Movie Web Logo" className="w-20 h-auto" />
+              <span className="text-lg font-extrabold tracking-tight text-custome-red">FLIXNEST</span>
               <button
                 onClick={closeMobileMenu}
                 className="text-white hover:text-custome-red transition-colors"

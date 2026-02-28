@@ -1,7 +1,5 @@
 'use client';
 import { useEffect, useState } from 'react';
-import Logo from '../../public/mini-logo.png';
-import Image from 'next/image';
 import { toast } from 'react-toastify';
 import { useAuthModel } from '../context/auth-modal-context';
 import LoginForm from './login-form';
@@ -12,7 +10,7 @@ export default function AuthModal() {
   const [showAnimation, setShowAnimation] = useState<boolean>(false);
   const [renderSignUpForm, setRenderSignUpForm] = useState<boolean>(false);
 
-  // Tắt cuộn khi modal mở
+  // Disable page scroll when modal is open
   useEffect(() => {
     if (isAuthModalOpen) {
       document.body.style.overflow = 'hidden';
@@ -24,7 +22,7 @@ export default function AuthModal() {
       setShowAnimation(false);
       setRenderSignUpForm(false);
     }
-    // Clean up khi component unmount
+    // Cleanup when component unmounts
     return () => {
       document.body.style.overflow = 'unset';
       document.body.style.paddingRight = `0px`;
@@ -57,11 +55,10 @@ export default function AuthModal() {
           onClick={() => closeAuthModal()}
           className="absolute top-2 right-4 text-gray-300 hover:text-white"
         >
-          &#x2715; {/* Dấu "x" để close */}
+          &#x2715;
         </button>
-        {/* Logo */}
         <div className="flex justify-center mb-4">
-          <Image src={Logo} alt="Logo" className="w-16 h-16" />
+          <span className="text-2xl font-extrabold tracking-tight text-custome-red">FLIXNEST</span>
         </div>
         {renderForm()}
       </div>
