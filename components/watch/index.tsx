@@ -35,10 +35,6 @@ const toPlaybackUrl = (candidateUrl: string) => {
   return `/api/media/playlist?url=${encodeURIComponent(candidateUrl)}`;
 };
 
-const SERVICE_RETRY_DELAY_MS = 5_000;
-
-const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
 export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
   const STREAM_CACHE_TTL_MS = 60_000;
   // episodes[serverIndex]: selected server
@@ -69,14 +65,6 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
   );
   const inFlightStreamRequestsRef = useRef<Map<string, Promise<StreamCandidate[]>>>(new Map());
   const kitsuSearchCacheRef = useRef<Map<string, { expiresAt: number; kitsuId: string }>>(new Map());
-  const publicConfiguredAddonBaseUrl = (
-    process.env.NEXT_PUBLIC_STREMIO_CONFIGURED_BASE_URL ||
-    process.env.NEXT_PUBLIC_STREMIO_ADDON_BASE_URL ||
-    ''
-  )
-    .replace(/\/manifest\.json$/i, '')
-    .replace(/\/+$/, '');
-
   const stremioType = movie.movie.tmdb?.type === 'tv' ? 'series' : 'movie';
   const isSeries = stremioType === 'series';
   const isAnimeLike = (movie.movie.category || []).some((item) =>
@@ -161,85 +149,39 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
         .filter((candidate): candidate is StreamCandidate => candidate !== null)
         .sort((a, b) => Number(b.isWebCompatible) - Number(a.isWebCompatible));
 
-    const appendSeasonEpisode = (base: string) => {
-      if (!isSeries || !querySeason || !queryEpisode) return [base];
-      return [base, `${base}:${querySeason}:${queryEpisode}`];
-    };
-
     const fetchStremioStreams = async (params: Record<string, string | number | undefined>) => {
-      if (!publicConfiguredAddonBaseUrl) return [];
+      const endpoint = new URL('/api/streams/stremio', window.location.origin);
+      endpoint.searchParams.set('type', stremioType);
+      endpoint.searchParams.set('id', String(params.id || '').trim());
 
-      const rawId = String(params.id || '').trim();
-      const imdbId = String(params.imdbId || '').trim();
-      const tmdbCandidate = String(params.tmdbId || params.id || '').trim();
-      const kitsuCandidate = String(params.kitsuId || '').trim();
-      const aniwaysCandidate = String(params.aniwaysId || '').trim();
+      if (isSeries && querySeason) {
+        endpoint.searchParams.set('season', String(querySeason));
+      }
+      if (isSeries && queryEpisode) {
+        endpoint.searchParams.set('episode', String(queryEpisode));
+      }
 
-      const candidatesRaw: string[] = [];
-      if (rawId) {
-        if (rawId.startsWith('tt') || rawId.includes(':')) {
-          candidatesRaw.push(...appendSeasonEpisode(rawId));
-        } else {
-          candidatesRaw.push(...appendSeasonEpisode(`tmdb:${rawId}`));
+      const optionalParams: Array<keyof typeof params> = ['imdbId', 'tmdbId', 'kitsuId', 'aniwaysId'];
+      optionalParams.forEach((key) => {
+        const value = String(params[key] || '').trim();
+        if (value) {
+          endpoint.searchParams.set(key, value);
         }
-      }
-      if (imdbId) {
-        candidatesRaw.push(...appendSeasonEpisode(imdbId));
-      }
-      if (tmdbCandidate) {
-        candidatesRaw.push(...appendSeasonEpisode(`tmdb:${tmdbCandidate}`));
-      }
-      if (kitsuCandidate) {
-        if (isSeries && queryEpisode) {
-          candidatesRaw.push(`kitsu:${kitsuCandidate}:${queryEpisode}`);
-          if (querySeason) {
-            candidatesRaw.push(`kitsu:${kitsuCandidate}:${querySeason}:${queryEpisode}`);
-          }
-        } else {
-          candidatesRaw.push(`kitsu:${kitsuCandidate}`);
-        }
-      }
-      if (aniwaysCandidate) {
-        if (isSeries && queryEpisode) {
-          candidatesRaw.push(`aniways:${aniwaysCandidate}:${queryEpisode}`);
-          if (querySeason) {
-            candidatesRaw.push(`aniways:${aniwaysCandidate}:${querySeason}:${queryEpisode}`);
-          }
-        } else {
-          candidatesRaw.push(`aniways:${aniwaysCandidate}`);
-        }
-      }
+      });
 
-      const idCandidates = Array.from(new Set(candidatesRaw.filter(Boolean)));
+      const res = await fetch(endpoint.toString(), {
+        method: 'GET',
+        cache: 'no-store',
+      });
 
-      for (const currentId of idCandidates) {
-        const endpoint = new URL(
-          `${publicConfiguredAddonBaseUrl}/stream/${encodeURIComponent(
-            stremioType
-          )}/${encodeURIComponent(currentId)}.json`
-        );
+      if (!res.ok) return [];
 
-        let res = await fetch(endpoint.toString(), {
-          method: 'GET',
-          cache: 'no-store',
-        });
-        if (res.status === 503) {
-          await wait(SERVICE_RETRY_DELAY_MS);
-          res = await fetch(endpoint.toString(), {
-            method: 'GET',
-            cache: 'no-store',
-          });
-        }
-        if (!res.ok) continue;
+      const data = await res.json();
+      const rawStreams = Array.isArray(data?.playable)
+        ? data.playable.map((item: any) => item?.raw).filter(Boolean)
+        : [];
 
-        const data = await res.json();
-        const candidates = mapStreamsToCandidates(Array.isArray(data?.streams) ? data.streams : []);
-        if (candidates.length > 0) {
-          return candidates;
-        }
-      }
-
-      return [];
+      return mapStreamsToCandidates(rawStreams);
     };
 
     const requestPromise = (async () => {
