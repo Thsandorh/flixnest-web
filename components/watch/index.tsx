@@ -1,9 +1,10 @@
 'use client';
 import DetailMovie from 'types/detail-movie';
 import VideoPlayer from './video-player';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { isHaveEpisodesMovie } from 'utils/movie-utils';
 import ServerSection from './server-section';
+import { useRef } from 'react';
 import ProgresswatchNotification from './progress-watch-notification';
 import { useDispatch, useSelector } from 'react-redux';
 import { setProgress } from '../../redux/slices/progress-slice';
@@ -33,33 +34,25 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
-  const resolveEpisodeLink = (targetServerIndex: number, targetEpisodeIndex: number) => {
-    return movie.episodes?.[targetServerIndex]?.server_data?.[targetEpisodeIndex]?.link_m3u8 || '';
-  };
-
-  const resolveDefaultEpisodeLink = () => {
-    return resolveEpisodeLink(0, 0);
-  };
-
   const handleSwitchEpisode = (index: number) => {
     setEpisodeIndex(index);
+    setEpisodeLink(movie.episodes[serverIndex].server_data[index].link_m3u8);
     setVideoProgress(null);
-    setEpisodeLink(resolveEpisodeLink(serverIndex, index) || resolveDefaultEpisodeLink());
   };
 
   const handleSetServerIndex = (index: number) => {
     if (index === serverIndex) return;
 
     setServerIndex(index);
+    setEpisodeLink(movie.episodes[index].server_data[0].link_m3u8);
     setEpisodeIndex(0);
-    setVideoProgress(null);
-    setEpisodeLink(resolveEpisodeLink(index, 0) || resolveDefaultEpisodeLink());
   };
 
   useEffect(() => {
+    setEpisodeLink(movie.episodes[0].server_data[0].link_m3u8);
     setEpisodeIndex(0);
-    setEpisodeLink(resolveDefaultEpisodeLink());
 
+    // restore progress watching of user authenticated
     if (user) {
       restoreUserWatchProgress(user.id, movie.movie._id);
     }
@@ -69,7 +62,10 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
 
   const restoreUserWatchProgress = async (userId: string, movieId: string) => {
     const res: any = await firebaseServices.getProgressWatchOfMovie(userId, movieId);
-    if (!res.status) return;
+
+    if (!res.status) {
+      return;
+    }
 
     setPreviousWatchProgress({
       progressEpIndex: res.progressEpIndex,
@@ -77,26 +73,31 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
       progressEpLink: res.progressEpLink,
     });
 
-    setTimeout(() => setIsShowToastProgress(true), 2000);
+    setTimeout(() => {
+      setIsShowToastProgress(true);
+    }, 2000);
   };
 
-  const restoreGuestWatchProgress = (guestProgress: any) => {
-    if (guestProgress?.id !== movie.movie._id) return;
+  const restoreGuestWatchProgress = (progress: any) => {
+    if (progress?.id !== movie.movie._id) return;
 
     setPreviousWatchProgress({
-      progressEpIndex: guestProgress.progress.episodeIndex,
-      progressTime: guestProgress.progress.progressTime,
-      progressEpLink: guestProgress.progress.episodeLink,
+      progressEpIndex: progress.progress.episodeIndex,
+      progressTime: progress.progress.progressTime,
+      progressEpLink: progress.progress.episodeLink,
     });
 
-    setTimeout(() => setIsShowToastProgress(true), 2000);
+    setTimeout(() => {
+      setIsShowToastProgress(true);
+    }, 2000);
   };
 
   const handleTrackingProgressWatch = async () => {
     if (videoRef.current?.currentTime === 0) return;
 
+    // store data for user not authenticated
     if (!user) {
-      const guestProgress = {
+      const progress = {
         id: movie.movie._id,
         slug: movie.movie.slug,
         thumb_url: movie.movie.thumb_url,
@@ -110,10 +111,12 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
           episodeLink,
         },
       };
-      dispatch(setProgress(guestProgress));
+
+      dispatch(setProgress(progress));
       return;
     }
 
+    // store data for user authenticated
     const recentMovieData: IRecentMovie = {
       userId: user.id,
       id: movie.movie._id,
@@ -125,20 +128,30 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
       quality: movie.movie.quality,
       progressEpIndex: episodeIndex || 0,
       progressTime: videoRef.current?.currentTime || 0,
-      progressEpLink: episodeLink || resolveDefaultEpisodeLink(),
+      progressEpLink: episodeLink || movie.episodes[0].server_data[0].link_m3u8,
     };
 
-    const blob = new Blob([JSON.stringify(recentMovieData)], { type: 'application/json' });
+    // Convert the data into a JSON string
+    const jsonData = JSON.stringify(recentMovieData);
+
+    // Create a Blob with the correct MIME type
+    const blob = new Blob([jsonData], { type: 'application/json' });
+
+    // this route will handle store recent movie and progress of movie
     navigator.sendBeacon('/api/movies/store-recent-movie', blob);
   };
 
   useEffect(() => {
     window.addEventListener('beforeunload', handleTrackingProgressWatch);
-    return () => window.removeEventListener('beforeunload', handleTrackingProgressWatch);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleTrackingProgressWatch);
+    };
   }, [episodeLink, user]);
 
   useEffect(() => {
     if (!videoRef.current || !isFirstPlay || !user) return;
+
     const videoElement = videoRef.current;
 
     const handleStoreRecentMovie = async () => {
@@ -152,7 +165,7 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
         quality: movie.movie.quality,
         progressEpIndex: progress.progress.episodeIndex || 0,
         progressTime: progress.progress.progressTime || 0,
-        progressEpLink: progress.progress.episodeLink || resolveDefaultEpisodeLink(),
+        progressEpLink: progress.progress.episodeLink || movie.episodes[0].server_data[0].link_m3u8,
       };
 
       await firebaseServices.storeRecentMovies(recentMovieData, user.id);
@@ -160,21 +173,23 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
     };
 
     videoElement.addEventListener('playing', handleStoreRecentMovie);
-    return () => videoElement.removeEventListener('playing', handleStoreRecentMovie);
+
+    return () => {
+      videoElement.removeEventListener('playing', handleStoreRecentMovie);
+    };
   }, [isFirstPlay, user]);
 
   const handleAcceptProgressWatch = () => {
     setEpisodeIndex(previousWatchProgress.progressEpIndex);
     setEpisodeLink(previousWatchProgress.progressEpLink);
     setVideoProgress(previousWatchProgress.progressTime);
+
     setIsShowToastProgress(false);
   };
 
   const handleRejectProgressWatch = () => {
     setIsShowToastProgress(false);
   };
-
-  const hasMultipleServers = movie.episodes.length > 1;
 
   return (
     <div className="pt-20 lg:pt-[3.75rem] space-y-6 lg:space-y-10">
@@ -185,8 +200,13 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
         handleRejectProgressWatch={handleRejectProgressWatch}
         movie={movie}
       />
-      <VideoPlayer ref={videoRef} videoUrl={episodeLink} thumbnail={movie.movie.poster_url} videoProgress={videoProgress} />
-      {hasMultipleServers && (
+      <VideoPlayer
+        ref={videoRef}
+        videoUrl={episodeLink}
+        thumbnail={movie.movie.poster_url}
+        videoProgress={videoProgress}
+      />
+      {movie.episodes.length > 1 && (
         <div className="text-center text-sm lg:text-base px-4">
           If playback is lagging, please choose one of the servers below
         </div>
