@@ -1,6 +1,7 @@
 import HeroSection from './hero-section';
 import MovieList from '../commons/movie-list';
 import MovieServices from 'services/movie-services';
+import CatalogSections from './catalog-sections';
 
 export default async function HomePage() {
   const newlyMoviesFetcher = MovieServices.getNewlyMovies();
@@ -9,22 +10,66 @@ export default async function HomePage() {
   const cartoonMoviesFetcher = MovieServices.getCartoonMovies();
   const tvShowsFetcher = MovieServices.getTVShows();
 
+  const tmdbActionMoviesFetcher = MovieServices.getMoviesType('movie-action', 1);
+  const tmdbDramaSeriesFetcher = MovieServices.getMoviesType('series-drama', 1);
+  const kitsuPopularAnimeFetcher = MovieServices.getMoviesType('anime-kitsu-popular', 1);
+
   // will improve later with Promise.settled()
-  const [newlyMovies, singleMovies, tvSeries, cartoonMovies, tvShows] = await Promise.all([newlyMoviesFetcher, singleMoviesFetcher, tvSeriesFetcher, cartoonMoviesFetcher, tvShowsFetcher]);
+  const [
+    newlyMovies,
+    singleMovies,
+    tvSeries,
+    cartoonMovies,
+    tvShows,
+    tmdbActionMovies,
+    tmdbDramaSeries,
+    kitsuPopularAnime,
+  ] = await Promise.all([
+    newlyMoviesFetcher,
+    singleMoviesFetcher,
+    tvSeriesFetcher,
+    cartoonMoviesFetcher,
+    tvShowsFetcher,
+    tmdbActionMoviesFetcher,
+    tmdbDramaSeriesFetcher,
+    kitsuPopularAnimeFetcher,
+  ]);
 
   return (
-    <div className='h-full'>
+    <div className="h-full">
       <HeroSection movies={newlyMovies.items.slice(0, 5)} />
       <div className="space-y-8">
+        <MovieList listName="Recently Updated Movies" movies={newlyMovies.items} isNewlyMovieItem={true} />
         <MovieList
-          listName="Recently Updated Movies"
-          movies={newlyMovies.items}
-          isNewlyMovieItem={true}
+          movies={singleMovies.data.items.slice(0, 10)}
+          listName="Recently Updated Single Movies"
+          isNewlyMovieItem={false}
         />
-        <MovieList movies={singleMovies.data.items.slice(0,10)} listName="Recently Updated Single Movies" isNewlyMovieItem={false} />
-        <MovieList movies={tvSeries.data.items.slice(0,10)} listName="Recently Updated Series" isNewlyMovieItem={false}/>
-        <MovieList movies={cartoonMovies.data.items.slice(0,10)} listName="Recently Updated Animation" isNewlyMovieItem={false}/>
-        <MovieList movies={tvShows.data.items.slice(0,10)} listName="Recently Updated TV Shows" isNewlyMovieItem={false}/>
+        <MovieList movies={tvSeries.data.items.slice(0, 10)} listName="Recently Updated Series" isNewlyMovieItem={false} />
+        <MovieList
+          movies={cartoonMovies.data.items.slice(0, 10)}
+          listName="Recently Updated Animation"
+          isNewlyMovieItem={false}
+        />
+        <MovieList movies={tvShows.data.items.slice(0, 10)} listName="Recently Updated TV Shows" isNewlyMovieItem={false} />
+
+        <MovieList
+          movies={tmdbActionMovies.data.items.slice(0, 10)}
+          listName="TMDB Catalog: Action Movies"
+          isNewlyMovieItem={false}
+        />
+        <MovieList
+          movies={tmdbDramaSeries.data.items.slice(0, 10)}
+          listName="TMDB Catalog: Drama Series"
+          isNewlyMovieItem={false}
+        />
+        <MovieList
+          movies={kitsuPopularAnime.data.items.slice(0, 10)}
+          listName="Kitsu Catalog: Popular Anime"
+          isNewlyMovieItem={false}
+        />
+
+        <CatalogSections />
       </div>
     </div>
   );
