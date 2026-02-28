@@ -55,7 +55,7 @@ export default function RecentMoviePage() {
       <div>
         <div className="text-xl md:text-2xl font-bold text-center">Recently watched movies</div>
         <div className="text-sm md:text-base text-center mt-1 text-gray-300 px-4 md:px-0">
-          MovieX now saves your watch progress across all movies you watch
+          FlixNest now saves your watch progress across all movies you watch
         </div>
       </div>
       {isLoading ? <LoadingSpinner /> : renderRecentMovies()}

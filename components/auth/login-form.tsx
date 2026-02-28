@@ -47,7 +47,7 @@ export default function LoginForm({
 
   return (
     <>
-      <h2 className="text-center text-white text-lg font-semibold mb-6">Sign in to MovieX</h2>
+      <h2 className="text-center text-white text-lg font-semibold mb-6">Sign in to FlixNest</h2>
       {/* Form */}
       <form onSubmit={handleSubmit(onSubmit)}>
         {/* Email Input */}

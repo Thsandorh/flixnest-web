@@ -12,13 +12,13 @@ export default function Footer() {
 
       <div className="container mx-auto px-4 md:px-6 py-12">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-20">
-          {/* Left Column - About MOVIEX */}
+          {/* Left Column - About FlixNest */}
           <div className="space-y-5">
             <Link href="/" className="inline-block">
-              <h2 className="text-4xl font-bold text-red-600 tracking-tight">MOVIEX</h2>
+              <h2 className="text-4xl font-bold text-red-600 tracking-tight">FLIXNEST</h2>
             </Link>
             <p className="text-sm text-gray-400 leading-relaxed">
-              MovieX is a high-quality online movie platform with Full HD streaming, updated content,
+              FlixNest is a high-quality online movie platform with Full HD streaming, updated content,
               and a wide catalog of films, series, and shows from many countries and genres.
             </p>
 
@@ -93,12 +93,12 @@ export default function Footer() {
 
         {/* Bottom Copyright Section with gradient border */}
         <div className="mt-12 pt-8 border-t border-gray-800 text-center">
-          <p className="text-sm text-gray-500">© 2024 MOVIEX. All rights reserved.</p>
+          <p className="text-sm text-gray-500">© 2024 FLIXNEST. All rights reserved.</p>
           <p className="mt-2 text-xs text-gray-600">
-            MOVIEX does not host any content on this website. All content is sourced from third-party providers.
+            FLIXNEST does not host any content on this website. All content is sourced from third-party providers.
           </p>
           <p className="mt-2 text-xs text-gray-600">
-            Watch high-quality movies online on MOVIEX.
+            Watch high-quality movies online on FLIXNEST.
           </p>
         </div>
       </div>

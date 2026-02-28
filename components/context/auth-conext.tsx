@@ -42,7 +42,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   };
 
   const loginWithGoogle = async () => {
-    toast.info('Google login SQL modban nincs engedelyezve.');
+    toast.info('Google login is not enabled in SQL mode.');
     return false;
   };
 
@@ -62,4 +62,3 @@ export const useAuth = () => {
   }
   return context;
 };
-

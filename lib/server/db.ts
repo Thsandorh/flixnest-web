@@ -8,16 +8,16 @@ const resolveDbPath = () => {
   }
 
   if (process.env.VERCEL) {
-    return path.join('/tmp', 'moviex.sqlite');
+    return path.join('/tmp', 'flixnest.sqlite');
   }
 
-  return path.join(process.cwd(), 'data', 'moviex.sqlite');
+  return path.join(process.cwd(), 'data', 'flixnest.sqlite');
 };
 
 const DB_PATH = resolveDbPath();
 
 type GlobalWithDb = typeof globalThis & {
-  __moviexDb?: Database.Database;
+  __flixnestDb?: Database.Database;
 };
 
 const globalWithDb = globalThis as GlobalWithDb;
@@ -79,11 +79,11 @@ function initialize(db: Database.Database) {
 }
 
 export function getDb() {
-  if (!globalWithDb.__moviexDb) {
+  if (!globalWithDb.__flixnestDb) {
     fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-    globalWithDb.__moviexDb = new Database(DB_PATH);
-    initialize(globalWithDb.__moviexDb);
+    globalWithDb.__flixnestDb = new Database(DB_PATH);
+    initialize(globalWithDb.__flixnestDb);
   }
 
-  return globalWithDb.__moviexDb;
+  return globalWithDb.__flixnestDb;
 }

@@ -9,6 +9,7 @@ import AuthServices from 'services/auth-services';
 import { toast } from 'react-toastify';
 import getFriendlyErrorMessage from 'utils/get-friendly-error-message';
 import LoadingSpinerBtn from '../loading/loading-spiner-btn';
+import { useAuth } from 'components/context/auth-conext';
 
 export default function SignUpForm({
   setRenderSignUpForm,
@@ -22,6 +23,7 @@ export default function SignUpForm({
     formState: { errors },
   } = useForm<signUpValidationSchemaType>({ resolver: zodResolver(signUpValidationSchema) });
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const { login } = useAuth();
 
   const onSubmit: SubmitHandler<signUpValidationSchemaType> = async (data) => {
     setIsLoading(true);
@@ -33,7 +35,12 @@ export default function SignUpForm({
         throw new Error(dataError.code || 'Login failed');
       }
 
-      toast.success("Registration successful");
+      const isLoggedIn = await login({ email: data.email, password: data.password });
+      if (isLoggedIn) {
+        toast.success('Registration successful. You are now signed in.');
+      } else {
+        toast.success('Registration successful. Please sign in to continue.');
+      }
       reset();
       setRenderSignUpForm(false);
 
@@ -46,7 +53,7 @@ export default function SignUpForm({
 
   return (
     <>
-      <h2 className="text-center text-white text-lg font-semibold mb-6">Create MovieX account</h2>
+      <h2 className="text-center text-white text-lg font-semibold mb-6">Create FlixNest account</h2>
       {/* Form */}
       <form onSubmit={handleSubmit(onSubmit)}>
         {/* Name Input */}
@@ -105,7 +112,7 @@ export default function SignUpForm({
             className="bg-[#e20913] text-white rounded p-2 w-full hover:bg-red-600 transition duration-200"
             disabled={isLoading}
           >
-            {isLoading ? <LoadingSpinerBtn /> : "Sign up"}
+            {isLoading ? <LoadingSpinerBtn /> : 'Sign up'}
           </button>
         </div>
       </form>

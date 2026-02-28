@@ -65,10 +65,10 @@ export default function SecuritySettings({ user }: SecuritySettingsProps) {
         throw new Error(payload?.code || 'auth/invalid-credential');
       }
 
-      toast.success('Doi mat khau thanh cong');
+      toast.success('Password changed successfully');
       handleCancel();
     } catch (error: any) {
-      let errorMessage = 'Co loi xay ra khi doi mat khau';
+      let errorMessage = 'An error occurred while changing your password';
       if (error.message === 'auth/invalid-credential') {
         errorMessage = 'Current password is incorrect';
       } else if (error.message === 'auth/weak-password') {
@@ -83,7 +83,7 @@ export default function SecuritySettings({ user }: SecuritySettingsProps) {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-xl font-semibold text-white">Security tai khoan</h2>
+        <h2 className="text-xl font-semibold text-white">Account security</h2>
         {!isChangingPassword && (
           <button
             onClick={() => {
@@ -92,7 +92,7 @@ export default function SecuritySettings({ user }: SecuritySettingsProps) {
             }}
             className="px-4 py-2 bg-custome-red text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-medium"
           >
-            Doi mat khau
+            Change password
           </button>
         )}
       </div>
@@ -103,21 +103,21 @@ export default function SecuritySettings({ user }: SecuritySettingsProps) {
             <IoShieldCheckmark className="text-green-400" size={20} />
             <h3 className="text-white font-medium">Password</h3>
           </div>
-          <p className="text-gray-400 text-sm">Tai khoan dang duoc bao ve bang mat khau</p>
+          <p className="text-gray-400 text-sm">Your account is protected with a password</p>
         </div>
 
         <div className="bg-gray-800/30 border border-gray-600 rounded-lg p-4">
           <div className="flex items-center space-x-3 mb-2">
             <IoShieldCheckmark className="text-green-400" size={20} />
-            <h3 className="text-white font-medium">Xac thuc 2 lop</h3>
+            <h3 className="text-white font-medium">Two-factor authentication</h3>
           </div>
-          <p className="text-gray-400 text-sm">Chua duoc kich hoat</p>
+          <p className="text-gray-400 text-sm">Not enabled</p>
         </div>
       </div>
 
       {isChangingPassword && (
         <div className="border-t border-gray-700 pt-6">
-          <h3 className="text-white font-medium mb-4">Thay doi mat khau</h3>
+          <h3 className="text-white font-medium mb-4">Change password</h3>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div>
               <label htmlFor="currentPassword" className="block text-gray-300 mb-2">
@@ -132,7 +132,7 @@ export default function SecuritySettings({ user }: SecuritySettingsProps) {
                   } bg-black text-white focus:outline-none focus:ring-2 ${
                     errors.currentPassword ? 'focus:ring-red-500' : 'focus:ring-custome-red'
                   } rounded-lg`}
-                  {...register('currentPassword', { required: 'Current password la bat buoc' })}
+                  {...register('currentPassword', { required: 'Current password is required' })}
                 />
                 <button
                   type="button"
@@ -158,8 +158,8 @@ export default function SecuritySettings({ user }: SecuritySettingsProps) {
                     errors.newPassword ? 'focus:ring-red-500' : 'focus:ring-custome-red'
                   } rounded-lg`}
                   {...register('newPassword', {
-                    required: 'New password la bat buoc',
-                    minLength: { value: 6, message: 'Password phai co it nhat 6 ky tu' },
+                    required: 'New password is required',
+                    minLength: { value: 6, message: 'Password must be at least 6 characters' },
                   })}
                 />
                 <button
@@ -174,7 +174,7 @@ export default function SecuritySettings({ user }: SecuritySettingsProps) {
 
             <div>
               <label htmlFor="confirmPassword" className="block text-gray-300 mb-2">
-                Xac nhan mat khau moi
+                Confirm new password
               </label>
               <div className="relative">
                 <input
@@ -186,8 +186,8 @@ export default function SecuritySettings({ user }: SecuritySettingsProps) {
                     errors.confirmPassword ? 'focus:ring-red-500' : 'focus:ring-custome-red'
                   } rounded-lg`}
                   {...register('confirmPassword', {
-                    required: 'Xac nhan mat khau la bat buoc',
-                    validate: (value) => value === newPassword || 'Password xac nhan khong khop',
+                    required: 'Password confirmation is required',
+                    validate: (value) => value === newPassword || 'Password confirmation does not match',
                   })}
                 />
                 <button
@@ -211,7 +211,7 @@ export default function SecuritySettings({ user }: SecuritySettingsProps) {
                 ) : (
                   <>
                     <IoCheckmark size={16} />
-                    <span>Doi mat khau</span>
+                    <span>Change password</span>
                   </>
                 )}
               </button>
@@ -221,7 +221,7 @@ export default function SecuritySettings({ user }: SecuritySettingsProps) {
                 className="flex items-center space-x-2 px-6 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
               >
                 <IoClose size={16} />
-                <span>Huy</span>
+                <span>Cancel</span>
               </button>
             </div>
           </form>
