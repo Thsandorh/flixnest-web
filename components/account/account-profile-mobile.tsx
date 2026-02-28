@@ -94,7 +94,7 @@ export default function AccountProfileMobile({
             className="flex items-center space-x-3 p-3 rounded-lg text-gray-300 hover:text-white hover:bg-gray-800/50 transition-colors"
           >
             <IoPerson size={18} />
-            <span className="text-sm font-medium">Thong tin ca nhan</span>
+            <span className="text-sm font-medium">Personal information</span>
           </Link>
 
           <button

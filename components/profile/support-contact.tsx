@@ -37,7 +37,7 @@ const contactMethods = [
     icon: IoMail,
     title: 'Support email',
     description: 'Send us an email',
-    contact: 'support@moviex.com',
+    contact: 'support@flixnest.com',
     action: 'Send email',
     color: 'text-blue-400',
   },
@@ -314,7 +314,7 @@ export default function SupportContact() {
           <div className="bg-gray-800/30 border border-gray-600 rounded-lg p-4">
             <h4 className="text-white font-medium mb-2">How can I delete my account?</h4>
             <p className="text-gray-400 text-sm">
-              Contact us at support@moviex.com to get help with account deletion.
+              Contact us at support@flixnest.com to get help with account deletion.
             </p>
           </div>
         </div>

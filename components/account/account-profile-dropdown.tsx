@@ -102,7 +102,7 @@ export default function AccountProfileDropdown({ authenticatedUser }: { authenti
           }
         >
           <IoPerson size={18} />
-          <span className="text-sm font-medium">Thong tin ca nhan</span>
+          <span className="text-sm font-medium">Personal information</span>
         </Link>
 
         <div className="border-t border-gray-700 my-2"></div>

@@ -52,7 +52,7 @@ export default function AuthModal() {
           showAnimation ? 'scale-100 opacity-100' : 'scale-50 opacity-0'
         }`}
       >
-        {/* Nút Close */}
+        {/* Close button */}
         <button
           onClick={() => closeAuthModal()}
           className="absolute top-2 right-4 text-gray-300 hover:text-white"
