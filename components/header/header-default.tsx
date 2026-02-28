@@ -44,7 +44,7 @@ export default function HeaderDefault({
               }`}
               href="/movies/format/phim-le"
             >
-              Single movies
+              Movies
             </Link>
           </li>
           <li className="px-8">

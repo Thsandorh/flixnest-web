@@ -1,10 +1,21 @@
-import movieType from "data/movie-type"
+import { movieTypeSections } from 'data/movie-type';
 import Link from 'next/link';
 
 export default function SubType() {
-    return <ul className="text-base group-hover:flex hidden absolute px-6 py-6 min-w-[35rem] right-0 bg-black h-60 flex-col flex-wrap z-10 gap-x-7 gap-y-4 before:absolute before:contents-[''] before:w-10 before:h-10 before:bg-black before:rotate-45 before:top-0 before:right-10 before:z-[-1]">
-    {movieType.map((item) => (
-      <li key={item.slug} className='hover:text-custome-red'><Link href={`/movies/type/${item.slug}`}>{item.name}</Link></li>
-    ))}
-  </ul>
+  return (
+    <ul className="text-base group-hover:grid hidden absolute px-6 py-6 min-w-[52rem] right-0 bg-black grid-cols-3 z-10 gap-x-8 gap-y-4 before:absolute before:contents-[''] before:w-10 before:h-10 before:bg-black before:rotate-45 before:top-0 before:right-10 before:z-[-1]">
+      {movieTypeSections.map((section) => (
+        <li key={section.title}>
+          <p className="text-sm uppercase tracking-wider text-gray-400 mb-3">{section.title}</p>
+          <ul className="space-y-2">
+            {section.items.map((item) => (
+              <li key={item.slug} className="hover:text-custome-red">
+                <Link href={`/movies/type/${item.slug}`}>{item.name}</Link>
+              </li>
+            ))}
+          </ul>
+        </li>
+      ))}
+    </ul>
+  );
 }
