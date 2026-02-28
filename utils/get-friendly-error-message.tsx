@@ -1,17 +1,17 @@
 export default function getFriendlyErrorMessage(errorCode: string): string {
   switch (errorCode) {
     case 'auth/invalid-credential':
-      return 'Thong tin dang nhap khong hop le.';
+      return 'Invalid login credentials.';
     case 'auth/user-not-found':
-      return 'Tai khoan khong ton tai.';
+      return 'Account does not exist.';
     case 'auth/wrong-password':
-      return 'Password khong chinh xac.';
+      return 'Incorrect password.';
     case 'auth/email-already-in-use':
-      return 'Email nay da duoc su dung.';
+      return 'This email is already in use.';
     case 'auth/invalid-email':
-      return 'Dia chi email khong hop le.';
+      return 'Invalid email address.';
     case 'auth/weak-password':
-      return 'Password qua yeu, toi thieu 6 ky tu.';
+      return 'Password is too weak; it must be at least 6 characters.';
     default:
       return 'An error occurred. Please try again later.';
   }

@@ -1,5 +1,5 @@
 <h1 align="center">
-   MovieX - An Online Movie Streaming Platform
+   FlixNest - An Online Movie Streaming Platform
 </h1>
 
 This project is a Next.js-based online movie streaming platform that allows users to watch movies, select episodes, and personalize their viewing experience through a secure login system. The platform features an intuitive user interface, enabling seamless navigation and access to a wide variety of movies and shows. Users can easily track their favorite content and enjoy a tailored experience based on their preferences.
