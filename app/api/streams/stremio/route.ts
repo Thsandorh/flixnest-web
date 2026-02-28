@@ -31,6 +31,21 @@ const isLikelyPlayable = async (url: string, timeoutMs = 5000) => {
 
 const trimTrailingSlash = (value: string) => value.replace(/\/+$/, '');
 
+const normalizeAddonBaseUrl = (rawBaseUrl: string) => {
+  const parsed = new URL(rawBaseUrl);
+
+  parsed.search = '';
+  parsed.hash = '';
+
+  const cleanedPath = parsed.pathname
+    .replace(/\/manifest\.json$/i, '')
+    .replace(/\/stream$/i, '')
+    .replace(/\/+$/, '');
+
+  parsed.pathname = cleanedPath || '/';
+  return trimTrailingSlash(parsed.toString());
+};
+
 const buildStreamEndpoint = (baseUrl: string, type: string, id: string) => {
   const cleanBase = trimTrailingSlash(baseUrl);
   return `${cleanBase}/stream/${encodeURIComponent(type)}/${encodeURIComponent(id)}.json`;
@@ -68,7 +83,8 @@ export async function GET(request: NextRequest) {
     const addonRequestUserAgent =
       process.env.STREMIO_REQUEST_USER_AGENT ||
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
-    const addonOrigin = new URL(trimTrailingSlash(addonBaseUrl)).origin;
+    const normalizedAddonBaseUrl = normalizeAddonBaseUrl(addonBaseUrl);
+    const addonOrigin = new URL(normalizedAddonBaseUrl).origin;
 
     const baseHeaders: Record<string, string> = {
       accept: 'application/json,text/plain,*/*',
@@ -93,12 +109,20 @@ export async function GET(request: NextRequest) {
     const candidatesRaw: string[] = [];
     candidatesRaw.push(...appendSeasonEpisode(id));
     candidatesRaw.push(...appendSeasonEpisode(`tmdb:${id}`));
+    candidatesRaw.push(...appendSeasonEpisode(`tmdb:${type}:${id}`));
+    if (type === 'series') {
+      candidatesRaw.push(...appendSeasonEpisode(`tmdb:tv:${id}`));
+    }
 
     if (imdbId) {
       candidatesRaw.push(...appendSeasonEpisode(imdbId));
     }
     if (tmdbId) {
       candidatesRaw.push(...appendSeasonEpisode(`tmdb:${tmdbId}`));
+      candidatesRaw.push(...appendSeasonEpisode(`tmdb:${type}:${tmdbId}`));
+      if (type === 'series') {
+        candidatesRaw.push(...appendSeasonEpisode(`tmdb:tv:${tmdbId}`));
+      }
     }
     if (kitsuId) {
       if (isSeries && episode) {
@@ -131,7 +155,7 @@ export async function GET(request: NextRequest) {
     let lastError: { status: number; statusText: string; body: string } | null = null;
 
     for (const currentId of idCandidates) {
-      const endpoint = new URL(buildStreamEndpoint(addonBaseUrl, type, currentId));
+      const endpoint = new URL(buildStreamEndpoint(normalizedAddonBaseUrl, type, currentId));
       if (token) {
         endpoint.searchParams.set(tokenQueryParam, token);
       }
