@@ -276,6 +276,15 @@ de      }
       return fetchStremioStreamsFromPublicBase(params);
     };
 
+    const fetchStremioStreams = async (params: Record<string, string | number | undefined>) => {
+      const proxyCandidates = await fetchStremioStreamsFromProxy(params);
+      if (proxyCandidates.length > 0) {
+        return proxyCandidates;
+      }
+
+      return fetchStremioStreamsFromPublicBase(params);
+    };
+
     const requestPromise = (async () => {
       try {
         if (tmdbId) {
@@ -545,6 +554,8 @@ de      }
     setEpisodeLink(nextCandidate.url);
   };
 
+  const hasMultipleServers = movie.episodes.length > 1;
+
   return (
     <div className="pt-20 lg:pt-[3.75rem] space-y-6 lg:space-y-10">
       <ProgresswatchNotification
@@ -566,7 +577,7 @@ de      }
           Playing via your Stremio stream source.
         </div>
       )}
-      {movie.episodes.length > 1 && (
+      {hasMultipleServers && (
         <div className="text-center text-sm lg:text-base px-4">
           If playback is lagging, please choose one of the servers below
         </div>
