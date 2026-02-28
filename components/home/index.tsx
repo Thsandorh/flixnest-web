@@ -1,6 +1,7 @@
 import HeroSection from './hero-section';
 import MovieList from '../commons/movie-list';
 import MovieServices from 'services/movie-services';
+import CatalogSections from './catalog-sections';
 
 export default async function HomePage() {
   const newlyMoviesFetcher = MovieServices.getNewlyMovies();
@@ -16,6 +17,7 @@ export default async function HomePage() {
     <div className='h-full'>
       <HeroSection movies={newlyMovies.items.slice(0, 5)} />
       <div className="space-y-8">
+        <CatalogSections />
         <MovieList
           listName="Recently Updated Movies"
           movies={newlyMovies.items}
