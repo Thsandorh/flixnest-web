@@ -35,10 +35,6 @@ const toPlaybackUrl = (candidateUrl: string) => {
   return `/api/media/playlist?url=${encodeURIComponent(candidateUrl)}`;
 };
 
-const SERVICE_RETRY_DELAY_MS = 5_000;
-
-const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
 export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
   const STREAM_CACHE_TTL_MS = 60_000;
   // episodes[serverIndex]: selected server
@@ -173,7 +169,7 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
 
       if (isSeries && querySeason) {
         endpoint.searchParams.set('season', String(querySeason));
-      }
+de      }
       if (isSeries && queryEpisode) {
         endpoint.searchParams.set('episode', String(queryEpisode));
       }
@@ -236,15 +232,8 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
           candidatesRaw.push(`kitsu:${kitsuCandidate}`);
         }
       }
-      if (aniwaysCandidate) {
-        if (isSeries && queryEpisode) {
-          candidatesRaw.push(`aniways:${aniwaysCandidate}:${queryEpisode}`);
-          if (querySeason) {
-            candidatesRaw.push(`aniways:${aniwaysCandidate}:${querySeason}:${queryEpisode}`);
-          }
-        } else {
-          candidatesRaw.push(`aniways:${aniwaysCandidate}`);
-        }
+      if (isSeries && queryEpisode) {
+        endpoint.searchParams.set('episode', String(queryEpisode));
       }
 
       const idCandidates = Array.from(new Set(candidatesRaw.filter(Boolean)));
@@ -270,14 +259,12 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
 
         if (!res.ok) continue;
 
-        const data = await res.json();
-        const candidates = mapStreamsToCandidates(Array.isArray(data?.streams) ? data.streams : []);
-        if (candidates.length > 0) {
-          return candidates;
-        }
-      }
+      const data = await res.json();
+      const rawStreams = Array.isArray(data?.playable)
+        ? data.playable.map((item: any) => item?.raw).filter(Boolean)
+        : [];
 
-      return [];
+      return mapStreamsToCandidates(rawStreams);
     };
 
     const fetchStremioStreams = async (params: Record<string, string | number | undefined>) => {
