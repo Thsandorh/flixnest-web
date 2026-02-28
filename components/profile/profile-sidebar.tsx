@@ -16,7 +16,7 @@ interface ProfileSidebarProps {
 }
 
 const menuItems = [
-  { id: 'personal' as ProfileSection, label: 'Thong tin ca nhan', icon: IoPerson },
+  { id: 'personal' as ProfileSection, label: 'Personal information', icon: IoPerson },
   { id: 'security' as ProfileSection, label: 'Security', icon: IoShieldCheckmark },
   { id: 'language' as ProfileSection, label: 'Language', icon: IoLanguage },
   { id: 'support' as ProfileSection, label: 'Support', icon: IoHelpCircle },
@@ -37,7 +37,7 @@ export default function ProfileSidebar({
       dispatch(removeUser());
       toast.success('Signed out successfully');
     } catch {
-      toast.error('Co loi xay ra khi dang xuat');
+      toast.error('An error occurred while signing out');
     } finally {
       setIsLoggingOut(false);
     }

@@ -32,29 +32,65 @@ const TMDB_GENRE_SLUG_MAP: Record<string, string> = {
   music: 'am-nhac',
 };
 
-const TYPE_SLUG_TO_GENRE_IDS: Record<string, { movie: number[]; tv: number[] }> = {
-  'hanh-dong': { movie: [28], tv: [10759] },
-  'co-trang': { movie: [36, 10752], tv: [10768] },
-  'vien-tuong': { movie: [878], tv: [10765] },
-  'kinh-di': { movie: [27], tv: [9648] },
-  'tai-lieu': { movie: [99], tv: [99] },
-  'bi-an': { movie: [9648, 80], tv: [9648, 80] },
-  'phim-18': { movie: [10749], tv: [10749] },
-  'tinh-cam': { movie: [10749], tv: [10749] },
-  'tam-ly': { movie: [53, 18], tv: [18] },
-  'the-thao': { movie: [99], tv: [10764] },
-  'phieu-luu': { movie: [12], tv: [10759] },
-  'am-nhac': { movie: [10402], tv: [10767] },
-  'gia-dinh': { movie: [10751], tv: [10751] },
-  'hoc-duong': { movie: [35], tv: [18] },
-  'hai-huoc': { movie: [35], tv: [35] },
-  'vo-thuat': { movie: [28], tv: [10759] },
-  'khoa-hoc': { movie: [99, 878], tv: [99] },
-  'than-thoai': { movie: [14], tv: [10765] },
-  'chinh-kich': { movie: [18], tv: [18] },
-  'kinh-dien': { movie: [18], tv: [18] },
+const TYPE_SLUG_TO_QUERY: Record<
+  string,
+  {
+    tmdbMovieGenres?: number[];
+    tmdbTvGenres?: number[];
+    kitsuCatalogId?: string;
+  }
+> = {
+  // Movie catalog (TMDB)
+  'movie-action': { tmdbMovieGenres: [28] },
+  'movie-adventure': { tmdbMovieGenres: [12] },
+  'movie-comedy': { tmdbMovieGenres: [35] },
+  'movie-drama': { tmdbMovieGenres: [18] },
+  'movie-horror': { tmdbMovieGenres: [27] },
+  'movie-sci-fi': { tmdbMovieGenres: [878] },
+  'movie-thriller': { tmdbMovieGenres: [53] },
+
+  // Series catalog (TMDB TV)
+  'series-action-adventure': { tmdbTvGenres: [10759] },
+  'series-comedy': { tmdbTvGenres: [35] },
+  'series-crime': { tmdbTvGenres: [80] },
+  'series-documentary': { tmdbTvGenres: [99] },
+  'series-drama': { tmdbTvGenres: [18] },
+  'series-mystery': { tmdbTvGenres: [9648] },
+  'series-sci-fi-fantasy': { tmdbTvGenres: [10765] },
+
+  // Anime catalog (TMDB + Kitsu)
+  'anime-tmdb-movies': { tmdbMovieGenres: [16] },
+  'anime-tmdb-series': { tmdbTvGenres: [16] },
+  'anime-kitsu-popular': { kitsuCatalogId: 'kitsu-anime-popular' },
+  'anime-kitsu-trending': { kitsuCatalogId: 'kitsu-anime-trending' },
+  'anime-kitsu-top-rated': { kitsuCatalogId: 'kitsu-anime-highest-rated' },
+  'anime-kitsu-upcoming': { kitsuCatalogId: 'kitsu-anime-upcoming' },
 };
 
+
+
+const LEGACY_TYPE_SLUG_TO_QUERY: Record<string, { tmdbMovieGenres?: number[]; tmdbTvGenres?: number[] }> = {
+  'hanh-dong': { tmdbMovieGenres: [28], tmdbTvGenres: [10759] },
+  'co-trang': { tmdbMovieGenres: [36, 10752], tmdbTvGenres: [10768] },
+  'vien-tuong': { tmdbMovieGenres: [878], tmdbTvGenres: [10765] },
+  'kinh-di': { tmdbMovieGenres: [27], tmdbTvGenres: [9648] },
+  'tai-lieu': { tmdbMovieGenres: [99], tmdbTvGenres: [99] },
+  'bi-an': { tmdbMovieGenres: [9648, 80], tmdbTvGenres: [9648, 80] },
+  'phim-18': { tmdbMovieGenres: [10749], tmdbTvGenres: [10749] },
+  'tinh-cam': { tmdbMovieGenres: [10749], tmdbTvGenres: [10749] },
+  'tam-ly': { tmdbMovieGenres: [53, 18], tmdbTvGenres: [18] },
+  'the-thao': { tmdbMovieGenres: [99], tmdbTvGenres: [10764] },
+  'phieu-luu': { tmdbMovieGenres: [12], tmdbTvGenres: [10759] },
+  'am-nhac': { tmdbMovieGenres: [10402], tmdbTvGenres: [10767] },
+  'gia-dinh': { tmdbMovieGenres: [10751], tmdbTvGenres: [10751] },
+  'hoc-duong': { tmdbMovieGenres: [35], tmdbTvGenres: [18] },
+  'hai-huoc': { tmdbMovieGenres: [35], tmdbTvGenres: [35] },
+  'vo-thuat': { tmdbMovieGenres: [28], tmdbTvGenres: [10759] },
+  'khoa-hoc': { tmdbMovieGenres: [99, 878], tmdbTvGenres: [99] },
+  'than-thoai': { tmdbMovieGenres: [14], tmdbTvGenres: [10765] },
+  'chinh-kich': { tmdbMovieGenres: [18], tmdbTvGenres: [18] },
+  'kinh-dien': { tmdbMovieGenres: [18], tmdbTvGenres: [18] },
+};
 const COUNTRY_SLUG_TO_CODES: Record<string, string[]> = {
   'trung-quoc': ['CN'],
   'han-quoc': ['KR'],
@@ -310,7 +346,7 @@ const buildEpisodeList = (count: number) => {
   const safeCount = Math.min(Math.max(Number(count || 1), 1), 200);
   return [
     {
-      server_name: 'Flix Streams',
+      server_name: 'FlixNest',
       server_data: Array.from({ length: safeCount }, (_, index) => ({
         name: String(index + 1),
         slug: `episode-${index + 1}`,
@@ -324,7 +360,7 @@ const buildEpisodeList = (count: number) => {
 
 const buildSingleEpisodeList = () => [
   {
-    server_name: 'Flix Streams',
+    server_name: 'FlixNest',
     server_data: [
       {
         name: 'Full',
@@ -814,17 +850,22 @@ const MovieServices = {
       return fetchLegacy(`/v1/api/the-loai/${slug}?page=${page}`, { data: { items: [] } }, 'no-store');
     }
 
-    const config = TYPE_SLUG_TO_GENRE_IDS[slug];
+    const config = TYPE_SLUG_TO_QUERY[slug] || LEGACY_TYPE_SLUG_TO_QUERY[slug];
     if (!config) {
       return { data: { items: [] } };
     }
 
+    if (config.kitsuCatalogId) {
+      const kitsuItems = await fetchKitsuCatalogMovies(config.kitsuCatalogId, page);
+      return { data: { items: kitsuItems } };
+    }
+
     const [movieItems, tvItems] = await Promise.all([
-      config.movie.length > 0
-        ? fetchTmdbMovies(page, `&with_genres=${config.movie.join(',')}`)
+      Array.isArray(config.tmdbMovieGenres) && config.tmdbMovieGenres.length > 0
+        ? fetchTmdbMovies(page, `&with_genres=${config.tmdbMovieGenres.join(',')}`)
         : Promise.resolve([]),
-      config.tv.length > 0
-        ? fetchTmdbTv(page, `&with_genres=${config.tv.join(',')}`)
+      Array.isArray(config.tmdbTvGenres) && config.tmdbTvGenres.length > 0
+        ? fetchTmdbTv(page, `&with_genres=${config.tmdbTvGenres.join(',')}`)
         : Promise.resolve([]),
     ]);
 

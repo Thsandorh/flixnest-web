@@ -11,7 +11,36 @@ import CommentSection from '../comment';
 import { IRecentMovie } from 'types/recent-movie';
 import firebaseServices from 'services/firebase-services';
 
+type StreamCandidate = {
+  url: string;
+  name: string;
+  title: string;
+  isWebCompatible: boolean;
+};
+
+const isPlaylistLikeUrl = (candidateUrl: string) => {
+  const normalized = String(candidateUrl || '').trim().toLowerCase();
+  if (!normalized) return false;
+
+  try {
+    const parsed = new URL(normalized);
+    return parsed.pathname.includes('.m3u8') || parsed.pathname.includes('/playlist/');
+  } catch {
+    return normalized.includes('.m3u8') || normalized.includes('/playlist/');
+  }
+};
+
+const toPlaybackUrl = (candidateUrl: string) => {
+  if (!isPlaylistLikeUrl(candidateUrl)) return candidateUrl;
+  return `/api/media/playlist?url=${encodeURIComponent(candidateUrl)}`;
+};
+
+const SERVICE_RETRY_DELAY_MS = 5_000;
+
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
+  const STREAM_CACHE_TTL_MS = 60_000;
   // episodes[serverIndex]: selected server
   // server_data[episodeIndex] || server_data[index]: episode
 
@@ -31,8 +60,22 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
   const [isShowToastProgress, setIsShowToastProgress] = useState(false);
   const [isFirstPlay, setIsFirstPlay] = useState<boolean>(true);
   const [isUsingStremioPrimary, setIsUsingStremioPrimary] = useState(false);
+  const [streamCandidates, setStreamCandidates] = useState<StreamCandidate[]>([]);
+  const [activeStreamIndex, setActiveStreamIndex] = useState(0);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const streamCacheRef = useRef<Map<string, { expiresAt: number; candidates: StreamCandidate[] }>>(
+    new Map()
+  );
+  const inFlightStreamRequestsRef = useRef<Map<string, Promise<StreamCandidate[]>>>(new Map());
+  const kitsuSearchCacheRef = useRef<Map<string, { expiresAt: number; kitsuId: string }>>(new Map());
+  const publicConfiguredAddonBaseUrl = (
+    process.env.NEXT_PUBLIC_STREMIO_CONFIGURED_BASE_URL ||
+    process.env.NEXT_PUBLIC_STREMIO_ADDON_BASE_URL ||
+    ''
+  )
+    .replace(/\/manifest\.json$/i, '')
+    .replace(/\/+$/, '');
 
   const stremioType = movie.movie.tmdb?.type === 'tv' ? 'series' : 'movie';
   const isSeries = stremioType === 'series';
@@ -50,79 +93,249 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
     return movie.episodes?.[targetServerIndex]?.server_data?.[targetEpisodeIndex]?.link_m3u8 || '';
   };
 
-  const fetchPrimaryStreamLink = async (targetEpisodeIndex = 0) => {
+  const readCachedCandidates = (cacheKey: string) => {
+    const cached = streamCacheRef.current.get(cacheKey);
+    if (!cached) return null;
+    if (cached.expiresAt < Date.now()) {
+      streamCacheRef.current.delete(cacheKey);
+      return null;
+    }
+    return cached.candidates;
+  };
+
+  const writeCachedCandidates = (cacheKey: string, candidates: StreamCandidate[]) => {
+    streamCacheRef.current.set(cacheKey, {
+      expiresAt: Date.now() + STREAM_CACHE_TTL_MS,
+      candidates,
+    });
+  };
+
+  const fetchPrimaryStreams = async (targetEpisodeIndex = 0) => {
     const tmdbId = movie.movie.tmdb?.id;
     const queryEpisode = isSeries ? targetEpisodeIndex + 1 : undefined;
     const querySeason = isSeries ? movie.movie.tmdb?.season || 1 : undefined;
+    const streamCacheKey = JSON.stringify({
+      tmdbId: tmdbId || '',
+      queryEpisode: queryEpisode || '',
+      querySeason: querySeason || '',
+      stremioType,
+      title: movie.movie.origin_name || movie.movie.name || '',
+      isAnimeLike,
+    });
 
-    const fetchStremioLink = async (params: Record<string, string | number | undefined>) => {
-      const searchParams = new URLSearchParams();
-      Object.entries(params).forEach(([key, value]) => {
-        if (value !== undefined && value !== null && `${value}`.trim() !== '') {
-          searchParams.set(key, String(value));
-        }
-      });
+    const cachedCandidates = readCachedCandidates(streamCacheKey);
+    if (cachedCandidates) return cachedCandidates;
 
-      const res = await fetch(`/api/streams/stremio?${searchParams.toString()}`, {
-        method: 'GET',
-        cache: 'no-store',
-      });
-      if (!res.ok) return '';
-      const data = await res.json();
-      if (data?.firstWorkingUrl) return data.firstWorkingUrl as string;
-      const firstPlayable = Array.isArray(data?.playable) ? data.playable[0] : null;
-      return firstPlayable?.url || '';
+    const inFlightRequest = inFlightStreamRequestsRef.current.get(streamCacheKey);
+    if (inFlightRequest) return inFlightRequest;
+
+    const mapStreamsToCandidates = (streams: any[]): StreamCandidate[] =>
+      streams
+        .map((stream): StreamCandidate | null => {
+          const candidateUrl = stream?.url
+            ? String(stream.url)
+            : stream?.externalUrl
+            ? String(stream.externalUrl)
+            : stream?.ytId
+            ? `https://www.youtube.com/watch?v=${stream.ytId}`
+            : '';
+          if (!candidateUrl) return null;
+
+          const requestHeaders = stream?.behaviorHints?.proxyHeaders?.request;
+          const requiresBlockedHeaders =
+            !!requestHeaders &&
+            (requestHeaders.Referer ||
+              requestHeaders.referer ||
+              requestHeaders.Origin ||
+              requestHeaders.origin ||
+              requestHeaders['User-Agent'] ||
+              requestHeaders['user-agent']);
+
+          return {
+            url: toPlaybackUrl(candidateUrl),
+            name: String(stream?.name || ''),
+            title: String(stream?.title || ''),
+            isWebCompatible: !requiresBlockedHeaders,
+          };
+        })
+        .filter((candidate): candidate is StreamCandidate => candidate !== null)
+        .sort((a, b) => Number(b.isWebCompatible) - Number(a.isWebCompatible));
+
+    const appendSeasonEpisode = (base: string) => {
+      if (!isSeries || !querySeason || !queryEpisode) return [base];
+      return [base, `${base}:${querySeason}:${queryEpisode}`];
     };
 
-    try {
-      if (tmdbId) {
-        const tmdbLink = await fetchStremioLink({
+    const fetchStremioStreams = async (params: Record<string, string | number | undefined>) => {
+      if (!publicConfiguredAddonBaseUrl) return [];
+
+      const rawId = String(params.id || '').trim();
+      const imdbId = String(params.imdbId || '').trim();
+      const tmdbCandidate = String(params.tmdbId || params.id || '').trim();
+      const kitsuCandidate = String(params.kitsuId || '').trim();
+      const aniwaysCandidate = String(params.aniwaysId || '').trim();
+
+      const candidatesRaw: string[] = [];
+      if (rawId) {
+        if (rawId.startsWith('tt') || rawId.includes(':')) {
+          candidatesRaw.push(...appendSeasonEpisode(rawId));
+        } else {
+          candidatesRaw.push(...appendSeasonEpisode(`tmdb:${rawId}`));
+        }
+      }
+      if (imdbId) {
+        candidatesRaw.push(...appendSeasonEpisode(imdbId));
+      }
+      if (tmdbCandidate) {
+        candidatesRaw.push(...appendSeasonEpisode(`tmdb:${tmdbCandidate}`));
+      }
+      if (kitsuCandidate) {
+        if (isSeries && queryEpisode) {
+          candidatesRaw.push(`kitsu:${kitsuCandidate}:${queryEpisode}`);
+          if (querySeason) {
+            candidatesRaw.push(`kitsu:${kitsuCandidate}:${querySeason}:${queryEpisode}`);
+          }
+        } else {
+          candidatesRaw.push(`kitsu:${kitsuCandidate}`);
+        }
+      }
+      if (aniwaysCandidate) {
+        if (isSeries && queryEpisode) {
+          candidatesRaw.push(`aniways:${aniwaysCandidate}:${queryEpisode}`);
+          if (querySeason) {
+            candidatesRaw.push(`aniways:${aniwaysCandidate}:${querySeason}:${queryEpisode}`);
+          }
+        } else {
+          candidatesRaw.push(`aniways:${aniwaysCandidate}`);
+        }
+      }
+
+      const idCandidates = Array.from(new Set(candidatesRaw.filter(Boolean)));
+
+      for (const currentId of idCandidates) {
+        const endpoint = new URL(
+          `${publicConfiguredAddonBaseUrl}/stream/${encodeURIComponent(
+            stremioType
+          )}/${encodeURIComponent(currentId)}.json`
+        );
+
+        let res = await fetch(endpoint.toString(), {
+          method: 'GET',
+          cache: 'no-store',
+        });
+        if (res.status === 503) {
+          await wait(SERVICE_RETRY_DELAY_MS);
+          res = await fetch(endpoint.toString(), {
+            method: 'GET',
+            cache: 'no-store',
+          });
+        }
+        if (!res.ok) continue;
+
+        const data = await res.json();
+        const candidates = mapStreamsToCandidates(Array.isArray(data?.streams) ? data.streams : []);
+        if (candidates.length > 0) {
+          return candidates;
+        }
+      }
+
+      return [];
+    };
+
+    const requestPromise = (async () => {
+      try {
+        if (tmdbId) {
+          const tmdbStreams = await fetchStremioStreams({
+            type: stremioType,
+            id: String(tmdbId),
+            season: querySeason,
+            episode: queryEpisode,
+          });
+          if (tmdbStreams.length > 0) {
+            writeCachedCandidates(streamCacheKey, tmdbStreams);
+            return tmdbStreams;
+          }
+        }
+
+        if (!isAnimeLike && !isSeries) {
+          writeCachedCandidates(streamCacheKey, []);
+          return [];
+        }
+
+        const resolverTitle = movie.movie.origin_name || movie.movie.name;
+        if (!resolverTitle) {
+          writeCachedCandidates(streamCacheKey, []);
+          return [];
+        }
+
+        const kitsuCacheKey = resolverTitle.trim().toLowerCase();
+        const cachedKitsu = kitsuSearchCacheRef.current.get(kitsuCacheKey);
+        const kitsuId =
+          cachedKitsu && cachedKitsu.expiresAt >= Date.now()
+            ? cachedKitsu.kitsuId
+            : await (async () => {
+                const kitsuRes = await fetch(
+                  `/api/anime/kitsu/search?title=${encodeURIComponent(resolverTitle)}&limit=5`,
+                  { method: 'GET', cache: 'no-store' }
+                );
+                if (!kitsuRes.ok) return '';
+
+                const kitsuData = await kitsuRes.json();
+                const resolvedKitsuId = String(kitsuData?.kitsuId || '').trim();
+                if (resolvedKitsuId) {
+                  kitsuSearchCacheRef.current.set(kitsuCacheKey, {
+                    expiresAt: Date.now() + STREAM_CACHE_TTL_MS,
+                    kitsuId: resolvedKitsuId,
+                  });
+                }
+                return resolvedKitsuId;
+              })();
+
+        if (!kitsuId) {
+          writeCachedCandidates(streamCacheKey, []);
+          return [];
+        }
+
+        const kitsuStreams = await fetchStremioStreams({
           type: stremioType,
-          id: String(tmdbId),
+          id: String(tmdbId || kitsuId),
+          kitsuId: String(kitsuId),
           season: querySeason,
           episode: queryEpisode,
         });
-        if (tmdbLink) return tmdbLink;
+        writeCachedCandidates(streamCacheKey, kitsuStreams);
+        return kitsuStreams;
+      } catch {
+        writeCachedCandidates(streamCacheKey, []);
+        return [];
+      } finally {
+        inFlightStreamRequestsRef.current.delete(streamCacheKey);
       }
+    })();
 
-      if (!isAnimeLike && !isSeries) return '';
+    inFlightStreamRequestsRef.current.set(streamCacheKey, requestPromise);
+    return requestPromise;
+  };
 
-      const resolverTitle = movie.movie.origin_name || movie.movie.name;
-      if (!resolverTitle) return '';
-
-      const kitsuRes = await fetch(
-        `/api/anime/kitsu/search?title=${encodeURIComponent(resolverTitle)}&limit=5`,
-        { method: 'GET', cache: 'no-store' }
-      );
-      if (!kitsuRes.ok) return '';
-
-      const kitsuData = await kitsuRes.json();
-      const kitsuId = kitsuData?.kitsuId;
-      if (!kitsuId) return '';
-
-      return await fetchStremioLink({
-        type: stremioType,
-        id: String(tmdbId || kitsuId),
-        kitsuId: String(kitsuId),
-        season: querySeason,
-        episode: queryEpisode,
-      });
-    } catch {
-      return '';
-    }
+  const applyPrimaryStreams = (candidates: StreamCandidate[]) => {
+    setStreamCandidates(candidates);
+    setActiveStreamIndex(0);
+    setEpisodeLink(candidates[0]?.url || '');
   };
 
   const handleSwitchEpisode = (index: number) => {
     const applyEpisode = async () => {
       setEpisodeIndex(index);
       setVideoProgress(null);
-      const stremioLink = await fetchPrimaryStreamLink(index);
-      if (stremioLink) {
-        setEpisodeLink(stremioLink);
+      const stremioStreams = await fetchPrimaryStreams(index);
+      if (stremioStreams.length > 0) {
+        applyPrimaryStreams(stremioStreams);
         setIsUsingStremioPrimary(true);
         return;
       }
 
+      setStreamCandidates([]);
+      setActiveStreamIndex(0);
       setEpisodeLink(resolveFallbackEpisodeLink(serverIndex, index));
       setIsUsingStremioPrimary(false);
     };
@@ -137,13 +350,15 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
       setServerIndex(index);
       setEpisodeIndex(0);
       setVideoProgress(null);
-      const stremioLink = await fetchPrimaryStreamLink(0);
-      if (stremioLink) {
-        setEpisodeLink(stremioLink);
+      const stremioStreams = await fetchPrimaryStreams(0);
+      if (stremioStreams.length > 0) {
+        applyPrimaryStreams(stremioStreams);
         setIsUsingStremioPrimary(true);
         return;
       }
 
+      setStreamCandidates([]);
+      setActiveStreamIndex(0);
       setEpisodeLink(resolveFallbackEpisodeLink(index, 0));
       setIsUsingStremioPrimary(false);
     };
@@ -154,12 +369,14 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
   useEffect(() => {
     const initEpisode = async () => {
       // Stremio is now the primary source.
-      const stremioLink = await fetchPrimaryStreamLink();
-      if (stremioLink) {
-        setEpisodeLink(stremioLink);
+      const stremioStreams = await fetchPrimaryStreams();
+      if (stremioStreams.length > 0) {
+        applyPrimaryStreams(stremioStreams);
         setIsUsingStremioPrimary(true);
       } else {
         const defaultLink = resolveFallbackEpisodeLink(0, 0) || resolveDefaultEpisodeLink();
+        setStreamCandidates([]);
+        setActiveStreamIndex(0);
         setEpisodeLink(defaultLink);
         setIsUsingStremioPrimary(false);
       }
@@ -283,6 +500,17 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
     setIsShowToastProgress(false);
   };
 
+  const handlePlaybackError = () => {
+    if (!isUsingStremioPrimary) return;
+
+    const nextIndex = activeStreamIndex + 1;
+    const nextCandidate = streamCandidates[nextIndex];
+    if (!nextCandidate) return;
+
+    setActiveStreamIndex(nextIndex);
+    setEpisodeLink(nextCandidate.url);
+  };
+
   return (
     <div className="pt-20 lg:pt-[3.75rem] space-y-6 lg:space-y-10">
       <ProgresswatchNotification
@@ -297,6 +525,7 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
         videoUrl={episodeLink}
         thumbnail={movie.movie.poster_url}
         videoProgress={videoProgress}
+        onPlaybackError={handlePlaybackError}
       />
       {isUsingStremioPrimary && (
         <div className="text-center text-xs lg:text-sm text-gray-400 px-4">

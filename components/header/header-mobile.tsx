@@ -1,7 +1,5 @@
 'use client';
 import React, { useState, useEffect } from 'react';
-import logo from '../../public/logo.png';
-import Image from 'next/image';
 import { IoSearch, IoMenu, IoClose, IoChevronDown, IoChevronUp } from 'react-icons/io5';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -11,7 +9,7 @@ import AccountProfileIcon from '../account/account-profile-icon';
 import AccountProfileMobile from '../account/account-profile-mobile';
 import Notification from '../notification';
 import { INotificationDropdownState } from 'types/notification';
-import movieType from '../../data/movie-type';
+import { movieTypeSections } from '../../data/movie-type';
 import countries from '../../data/countries';
 
 export default function HeaderMobile({
@@ -77,7 +75,7 @@ export default function HeaderMobile({
 
           {/* Logo */}
           <Link className="block" href="/" onClick={closeMobileMenu}>
-            <Image src={logo} alt="Movie Web Logo" className="w-24 h-auto" />
+            <span className="text-xl font-extrabold tracking-tight text-custome-red">FLIXNEST</span>
           </Link>
 
           {/* Search Icon */}
@@ -100,7 +98,7 @@ export default function HeaderMobile({
           >
             {/* Menu Header */}
             <div className="flex items-center justify-between p-4 border-b border-gray-800">
-              <Image src={logo} alt="Movie Web Logo" className="w-20 h-auto" />
+              <span className="text-lg font-extrabold tracking-tight text-custome-red">FLIXNEST</span>
               <button
                 onClick={closeMobileMenu}
                 className="text-white hover:text-custome-red transition-colors"
@@ -181,19 +179,26 @@ export default function HeaderMobile({
                       </button>
                       {isTypeSubmenuOpen && (
                         <ul className="ml-4 mt-2 space-y-2 border-l border-gray-700 pl-4">
-                          {movieType.map((item) => (
-                            <li key={item.slug}>
-                              <Link
-                                className={`block py-1 text-base transition-colors ${
-                                  pathname === `/movies/type/${item.slug}`
-                                    ? 'text-custome-red'
-                                    : 'text-gray-300 hover:text-custome-red'
-                                }`}
-                                href={`/movies/type/${item.slug}`}
-                                onClick={closeMobileMenu}
-                              >
-                                {item.name}
-                              </Link>
+                          {movieTypeSections.map((section) => (
+                            <li key={section.title}>
+                              <p className="text-xs uppercase tracking-wide text-gray-500 py-1">{section.title}</p>
+                              <ul className="space-y-2 pb-2">
+                                {section.items.map((item) => (
+                                  <li key={item.slug}>
+                                    <Link
+                                      className={`block py-1 text-base transition-colors ${
+                                        pathname === `/movies/type/${item.slug}`
+                                          ? 'text-custome-red'
+                                          : 'text-gray-300 hover:text-custome-red'
+                                      }`}
+                                      href={`/movies/type/${item.slug}`}
+                                      onClick={closeMobileMenu}
+                                    >
+                                      {item.name}
+                                    </Link>
+                                  </li>
+                                ))}
+                              </ul>
                             </li>
                           ))}
                         </ul>
