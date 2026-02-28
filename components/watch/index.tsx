@@ -75,8 +75,8 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
     ''
   )
     .replace(/\/manifest\.json$/i, '')
+    .replace(/\/stream$/i, '')
     .replace(/\/+$/, '');
-
   const stremioType = movie.movie.tmdb?.type === 'tv' ? 'series' : 'movie';
   const isSeries = stremioType === 'series';
   const isAnimeLike = (movie.movie.category || []).some((item) =>
@@ -166,7 +166,44 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
       return [base, `${base}:${querySeason}:${queryEpisode}`];
     };
 
-    const fetchStremioStreams = async (params: Record<string, string | number | undefined>) => {
+    const fetchStremioStreamsFromProxy = async (params: Record<string, string | number | undefined>) => {
+      const endpoint = new URL('/api/streams/stremio', window.location.origin);
+      endpoint.searchParams.set('type', stremioType);
+      endpoint.searchParams.set('id', String(params.id || '').trim());
+
+      if (isSeries && querySeason) {
+        endpoint.searchParams.set('season', String(querySeason));
+      }
+      if (isSeries && queryEpisode) {
+        endpoint.searchParams.set('episode', String(queryEpisode));
+      }
+
+      const optionalParams: Array<keyof typeof params> = ['imdbId', 'tmdbId', 'kitsuId', 'aniwaysId'];
+      optionalParams.forEach((key) => {
+        const value = String(params[key] || '').trim();
+        if (value) {
+          endpoint.searchParams.set(key, value);
+        }
+      });
+
+      const res = await fetch(endpoint.toString(), {
+        method: 'GET',
+        cache: 'no-store',
+      });
+
+      if (!res.ok) return [];
+
+      const data = await res.json();
+      const rawStreams = Array.isArray(data?.playable)
+        ? data.playable.map((item: any) => item?.raw).filter(Boolean)
+        : [];
+
+      return mapStreamsToCandidates(rawStreams);
+    };
+
+    const fetchStremioStreamsFromPublicBase = async (
+      params: Record<string, string | number | undefined>
+    ) => {
       if (!publicConfiguredAddonBaseUrl) return [];
 
       const rawId = String(params.id || '').trim();
@@ -211,7 +248,6 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
       }
 
       const idCandidates = Array.from(new Set(candidatesRaw.filter(Boolean)));
-
       for (const currentId of idCandidates) {
         const endpoint = new URL(
           `${publicConfiguredAddonBaseUrl}/stream/${encodeURIComponent(
@@ -223,6 +259,7 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
           method: 'GET',
           cache: 'no-store',
         });
+
         if (res.status === 503) {
           await wait(SERVICE_RETRY_DELAY_MS);
           res = await fetch(endpoint.toString(), {
@@ -230,6 +267,7 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
             cache: 'no-store',
           });
         }
+
         if (!res.ok) continue;
 
         const data = await res.json();
@@ -240,6 +278,15 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
       }
 
       return [];
+    };
+
+    const fetchStremioStreams = async (params: Record<string, string | number | undefined>) => {
+      const proxyCandidates = await fetchStremioStreamsFromProxy(params);
+      if (proxyCandidates.length > 0) {
+        return proxyCandidates;
+      }
+
+      return fetchStremioStreamsFromPublicBase(params);
     };
 
     const requestPromise = (async () => {
@@ -511,6 +558,8 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
     setEpisodeLink(nextCandidate.url);
   };
 
+  const hasMultipleServers = movie.episodes.length > 1;
+
   return (
     <div className="pt-20 lg:pt-[3.75rem] space-y-6 lg:space-y-10">
       <ProgresswatchNotification
@@ -532,7 +581,7 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
           Playing via your Stremio stream source.
         </div>
       )}
-      {movie.episodes.length > 1 && (
+      {hasMultipleServers && (
         <div className="text-center text-sm lg:text-base px-4">
           If playback is lagging, please choose one of the servers below
         </div>
