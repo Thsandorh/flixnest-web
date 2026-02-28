@@ -40,8 +40,8 @@ export const movieTypeSections: MovieTypeSection[] = [
   {
     title: 'Anime catalog',
     items: [
-      { name: 'TMDB Animation Movies', slug: 'anime-tmdb-movies', source: 'tmdb', catalog: 'anime' },
-      { name: 'TMDB Animation Series', slug: 'anime-tmdb-series', source: 'tmdb', catalog: 'anime' },
+      { name: 'Animation Movies', slug: 'anime-tmdb-movies', source: 'tmdb', catalog: 'anime' },
+      { name: 'Animation Series', slug: 'anime-tmdb-series', source: 'tmdb', catalog: 'anime' },
       { name: 'Kitsu Popular', slug: 'anime-kitsu-popular', source: 'kitsu', catalog: 'anime' },
       { name: 'Kitsu Trending', slug: 'anime-kitsu-trending', source: 'kitsu', catalog: 'anime' },
       { name: 'Kitsu Top Rated', slug: 'anime-kitsu-top-rated', source: 'kitsu', catalog: 'anime' },

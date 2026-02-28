@@ -123,7 +123,7 @@ export default function HeaderMobile({
                         href="/movies/format/phim-le"
                         onClick={closeMobileMenu}
                       >
-                        Single movies
+                        Movies
                       </Link>
                     </li>
                     <li>

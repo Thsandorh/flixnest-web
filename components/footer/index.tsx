@@ -16,12 +16,12 @@ const catalogLinks = [
   { label: 'Series catalog', href: '/movies/format/phim-bo' },
   { label: 'Anime catalog', href: '/movies/format/hoat-hinh' },
   { label: 'TV show catalog', href: '/movies/format/tv-shows' },
-  { label: 'TMDB Action movies', href: '/movies/type/movie-action' },
-  { label: 'TMDB Drama series', href: '/movies/type/series-drama' },
-  { label: 'Kitsu Popular anime', href: '/movies/type/anime-kitsu-popular' },
-  { label: 'Kitsu Trending anime', href: '/movies/type/anime-kitsu-trending' },
-  { label: 'Kitsu Top rated anime', href: '/movies/type/anime-kitsu-top-rated' },
-  { label: 'Kitsu Upcoming anime', href: '/movies/type/anime-kitsu-upcoming' },
+  { label: 'Action movies', href: '/movies/type/movie-action' },
+  { label: 'Drama series', href: '/movies/type/series-drama' },
+  { label: 'Popular anime', href: '/movies/type/anime-kitsu-popular' },
+  { label: 'Trending anime', href: '/movies/type/anime-kitsu-trending' },
+  { label: 'Top rated anime', href: '/movies/type/anime-kitsu-top-rated' },
+  { label: 'Upcoming anime', href: '/movies/type/anime-kitsu-upcoming' },
 ];
 
 export default function Footer() {

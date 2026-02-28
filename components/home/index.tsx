@@ -6,27 +6,27 @@ import CatalogSections from './catalog-sections';
 const curatedCatalogRows = [
   {
     slug: 'movie-action',
-    title: 'TMDB Movie Catalog: Action Hits',
+    title: 'Action Movies',
   },
   {
     slug: 'movie-sci-fi',
-    title: 'TMDB Movie Catalog: Sci-Fi Picks',
+    title: 'Sci-Fi Movies',
   },
   {
     slug: 'series-crime',
-    title: 'TMDB Series Catalog: Crime Stories',
+    title: 'Crime Series',
   },
   {
     slug: 'series-sci-fi-fantasy',
-    title: 'TMDB Series Catalog: Sci-Fi & Fantasy',
+    title: 'Sci-Fi & Fantasy Series',
   },
   {
     slug: 'anime-tmdb-series',
-    title: 'TMDB Anime Catalog: Animation Series',
+    title: 'Animation Series',
   },
   {
     slug: 'anime-kitsu-popular',
-    title: 'Kitsu Anime Catalog: Popular Now',
+    title: 'Popular Anime',
   },
 ] as const;
 
@@ -55,7 +55,7 @@ export default async function HomePage() {
         <MovieList listName="Recently Updated Movies" movies={newlyMovies.items} isNewlyMovieItem={true} />
         <MovieList
           movies={singleMovies.data.items.slice(0, 10)}
-          listName="Recently Updated Single Movies"
+          listName="Recently Updated Movies"
           isNewlyMovieItem={false}
         />
         <MovieList movies={tvSeries.data.items.slice(0, 10)} listName="Recently Updated Series" isNewlyMovieItem={false} />
