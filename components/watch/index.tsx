@@ -370,6 +370,16 @@ de      }
     const applyEpisode = async () => {
       setEpisodeIndex(index);
       setVideoProgress(null);
+
+      const fallbackLink = resolveFallbackEpisodeLink(serverIndex, index);
+      if (fallbackLink) {
+        setStreamCandidates([]);
+        setActiveStreamIndex(0);
+        setEpisodeLink(fallbackLink);
+        setIsUsingStremioPrimary(false);
+        return;
+      }
+
       const stremioStreams = await fetchPrimaryStreams(index);
       if (stremioStreams.length > 0) {
         applyPrimaryStreams(stremioStreams);
@@ -379,7 +389,7 @@ de      }
 
       setStreamCandidates([]);
       setActiveStreamIndex(0);
-      setEpisodeLink(resolveFallbackEpisodeLink(serverIndex, index));
+      setEpisodeLink(resolveDefaultEpisodeLink());
       setIsUsingStremioPrimary(false);
     };
 
@@ -393,6 +403,16 @@ de      }
       setServerIndex(index);
       setEpisodeIndex(0);
       setVideoProgress(null);
+
+      const fallbackLink = resolveFallbackEpisodeLink(index, 0);
+      if (fallbackLink) {
+        setStreamCandidates([]);
+        setActiveStreamIndex(0);
+        setEpisodeLink(fallbackLink);
+        setIsUsingStremioPrimary(false);
+        return;
+      }
+
       const stremioStreams = await fetchPrimaryStreams(0);
       if (stremioStreams.length > 0) {
         applyPrimaryStreams(stremioStreams);
@@ -402,7 +422,7 @@ de      }
 
       setStreamCandidates([]);
       setActiveStreamIndex(0);
-      setEpisodeLink(resolveFallbackEpisodeLink(index, 0));
+      setEpisodeLink(resolveDefaultEpisodeLink());
       setIsUsingStremioPrimary(false);
     };
 
@@ -411,16 +431,25 @@ de      }
 
   useEffect(() => {
     const initEpisode = async () => {
-      // Stremio is now the primary source.
+      const defaultLink = resolveFallbackEpisodeLink(0, 0) || resolveDefaultEpisodeLink();
+
+      if (defaultLink) {
+        setStreamCandidates([]);
+        setActiveStreamIndex(0);
+        setEpisodeLink(defaultLink);
+        setIsUsingStremioPrimary(false);
+        setEpisodeIndex(0);
+        return;
+      }
+
       const stremioStreams = await fetchPrimaryStreams();
       if (stremioStreams.length > 0) {
         applyPrimaryStreams(stremioStreams);
         setIsUsingStremioPrimary(true);
       } else {
-        const defaultLink = resolveFallbackEpisodeLink(0, 0) || resolveDefaultEpisodeLink();
         setStreamCandidates([]);
         setActiveStreamIndex(0);
-        setEpisodeLink(defaultLink);
+        setEpisodeLink('');
         setIsUsingStremioPrimary(false);
       }
       setEpisodeIndex(0);
