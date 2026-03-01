@@ -125,17 +125,17 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
           } => item !== null
         );
 
-      const webReady = mapped.filter((item) => !item.isBlocked);
+      const webReady = mapped.filter((item: StreamCandidate & { isBlocked: boolean }) => !item.isBlocked);
       const ordered = webReady.length > 0 ? webReady : mapped;
 
       const seen = new Set<string>();
       return ordered
-        .filter((item) => {
+        .filter((item: StreamCandidate & { isBlocked: boolean }) => {
           if (seen.has(item.url)) return false;
           seen.add(item.url);
           return true;
         })
-        .map((item) => ({ url: item.url, name: item.name, title: item.title }));
+        .map((item: StreamCandidate & { isBlocked: boolean }) => ({ url: item.url, name: item.name, title: item.title }));
     } catch {
       return [];
     }
