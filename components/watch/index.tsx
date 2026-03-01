@@ -12,6 +12,29 @@ import CommentSection from '../comment';
 import { IRecentMovie } from 'types/recent-movie';
 import firebaseServices from 'services/firebase-services';
 
+type StreamCandidate = {
+  url: string;
+  name: string;
+  title: string;
+};
+
+const isPlaylistLikeUrl = (candidateUrl: string) => {
+  const normalized = String(candidateUrl || '').trim().toLowerCase();
+  if (!normalized) return false;
+
+  try {
+    const parsed = new URL(normalized);
+    return parsed.pathname.includes('.m3u8') || parsed.pathname.includes('/playlist/');
+  } catch {
+    return normalized.includes('.m3u8') || normalized.includes('/playlist/');
+  }
+};
+
+const toPlaybackUrl = (candidateUrl: string) => {
+  if (!isPlaylistLikeUrl(candidateUrl)) return candidateUrl;
+  return `/api/media/playlist?url=${encodeURIComponent(candidateUrl)}`;
+};
+
 export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
   // episodes[serverIndex]: selected server
   // server_data[episodeIndex] || server_data[index]: episode
@@ -31,26 +54,121 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
   });
   const [isShowToastProgress, setIsShowToastProgress] = useState(false);
   const [isFirstPlay, setIsFirstPlay] = useState<boolean>(true);
+  const [streamCandidates, setStreamCandidates] = useState<StreamCandidate[]>([]);
+  const [activeStreamIndex, setActiveStreamIndex] = useState(0);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const streamRequestTokenRef = useRef(0);
+
+  const stremioType = movie.movie.tmdb?.type === 'tv' ? 'series' : 'movie';
+  const stremioTmdbId = String(movie.movie.tmdb?.id || '').trim();
+  const stremioSeason = Number(movie.movie.tmdb?.season || 1);
+
+  const resolveEpisodeLink = (targetServerIndex: number, targetEpisodeIndex: number) => {
+    return movie.episodes?.[targetServerIndex]?.server_data?.[targetEpisodeIndex]?.link_m3u8 || '';
+  };
+
+  const fetchStremioCandidates = async (targetEpisodeIndex: number): Promise<StreamCandidate[]> => {
+    if (!stremioTmdbId) return [];
+
+    try {
+      const endpoint = new URL('/api/streams/stremio', window.location.origin);
+      endpoint.searchParams.set('type', stremioType);
+      endpoint.searchParams.set('id', stremioTmdbId);
+      endpoint.searchParams.set('tmdbId', stremioTmdbId);
+
+      if (stremioType === 'series') {
+        endpoint.searchParams.set('season', String(stremioSeason));
+        endpoint.searchParams.set('episode', String(targetEpisodeIndex + 1));
+      }
+
+      const res = await fetch(endpoint.toString(), {
+        method: 'GET',
+        cache: 'no-store',
+      });
+
+      if (!res.ok) return [];
+
+      const data = await res.json();
+      const firstWorkingUrl = String(data?.firstWorkingUrl || '').trim();
+      const playable = Array.isArray(data?.playable) ? data.playable : [];
+
+      const mapped = playable
+        .map((item: any) => {
+          const rawUrl = String(item?.url || item?.raw?.url || item?.raw?.externalUrl || '').trim();
+          if (!rawUrl) return null;
+
+          return {
+            url: toPlaybackUrl(rawUrl),
+            name: String(item?.name || item?.raw?.name || ''),
+            title: String(item?.raw?.title || ''),
+          };
+        })
+        .filter((item: StreamCandidate | null): item is StreamCandidate => item !== null);
+
+      const ordered = firstWorkingUrl
+        ? [
+            ...mapped.filter((candidate) => candidate.url === toPlaybackUrl(firstWorkingUrl)),
+            ...mapped.filter((candidate) => candidate.url !== toPlaybackUrl(firstWorkingUrl)),
+          ]
+        : mapped;
+
+      const seen = new Set<string>();
+      return ordered.filter((candidate) => {
+        if (seen.has(candidate.url)) return false;
+        seen.add(candidate.url);
+        return true;
+      });
+    } catch {
+      return [];
+    }
+  };
+
+  const loadEpisodeSource = async (targetServerIndex: number, targetEpisodeIndex: number) => {
+    const token = ++streamRequestTokenRef.current;
+    const nativeLink = resolveEpisodeLink(targetServerIndex, targetEpisodeIndex);
+
+    if (nativeLink) {
+      if (token !== streamRequestTokenRef.current) return;
+      setStreamCandidates([]);
+      setActiveStreamIndex(0);
+      setEpisodeLink(nativeLink);
+      return;
+    }
+
+    const candidates = await fetchStremioCandidates(targetEpisodeIndex);
+    if (token !== streamRequestTokenRef.current) return;
+
+    if (candidates.length > 0) {
+      setStreamCandidates(candidates);
+      setActiveStreamIndex(0);
+      setEpisodeLink(candidates[0].url);
+      return;
+    }
+
+    setStreamCandidates([]);
+    setActiveStreamIndex(0);
+    setEpisodeLink('');
+  };
 
   const handleSwitchEpisode = (index: number) => {
     setEpisodeIndex(index);
-    setEpisodeLink(movie.episodes[serverIndex].server_data[index].link_m3u8);
     setVideoProgress(null);
+    void loadEpisodeSource(serverIndex, index);
   };
 
   const handleSetServerIndex = (index: number) => {
     if (index === serverIndex) return;
 
     setServerIndex(index);
-    setEpisodeLink(movie.episodes[index].server_data[0].link_m3u8);
     setEpisodeIndex(0);
+    setVideoProgress(null);
+    void loadEpisodeSource(index, 0);
   };
 
   useEffect(() => {
-    setEpisodeLink(movie.episodes[0].server_data[0].link_m3u8);
     setEpisodeIndex(0);
+    void loadEpisodeSource(0, 0);
 
     // restore progress watching of user authenticated
     if (user) {
@@ -181,14 +299,28 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
 
   const handleAcceptProgressWatch = () => {
     setEpisodeIndex(previousWatchProgress.progressEpIndex);
-    setEpisodeLink(previousWatchProgress.progressEpLink);
     setVideoProgress(previousWatchProgress.progressTime);
+
+    if (previousWatchProgress.progressEpLink) {
+      setEpisodeLink(previousWatchProgress.progressEpLink);
+    } else {
+      void loadEpisodeSource(serverIndex, previousWatchProgress.progressEpIndex);
+    }
 
     setIsShowToastProgress(false);
   };
 
   const handleRejectProgressWatch = () => {
     setIsShowToastProgress(false);
+  };
+
+  const handlePlaybackError = () => {
+    const nextIndex = activeStreamIndex + 1;
+    const nextCandidate = streamCandidates[nextIndex];
+    if (!nextCandidate) return;
+
+    setActiveStreamIndex(nextIndex);
+    setEpisodeLink(nextCandidate.url);
   };
 
   return (
@@ -205,6 +337,7 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
         videoUrl={episodeLink}
         thumbnail={movie.movie.poster_url}
         videoProgress={videoProgress}
+        onPlaybackError={handlePlaybackError}
       />
       {movie.episodes.length > 1 && (
         <div className="text-center text-sm lg:text-base px-4">
