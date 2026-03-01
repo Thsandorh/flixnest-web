@@ -55,6 +55,7 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
   const [isFirstPlay, setIsFirstPlay] = useState<boolean>(true);
   const [streamCandidates, setStreamCandidates] = useState<StreamCandidate[]>([]);
   const [activeStreamIndex, setActiveStreamIndex] = useState(0);
+  const [isResolvingStream, setIsResolvingStream] = useState<boolean>(true);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRequestTokenRef = useRef(0);
@@ -143,6 +144,7 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
 
   const loadEpisodeSource = async (targetServerIndex: number, targetEpisodeIndex: number) => {
     const token = ++streamRequestTokenRef.current;
+    setIsResolvingStream(true);
     const nativeLink = resolveEpisodeLink(targetServerIndex, targetEpisodeIndex);
 
     if (nativeLink) {
@@ -150,6 +152,7 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
       setStreamCandidates([]);
       setActiveStreamIndex(0);
       setEpisodeLink(nativeLink);
+      setIsResolvingStream(false);
       return;
     }
 
@@ -160,12 +163,14 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
       setStreamCandidates(addonCandidates);
       setActiveStreamIndex(0);
       setEpisodeLink(addonCandidates[0].url);
+      setIsResolvingStream(false);
       return;
     }
 
     setStreamCandidates([]);
     setActiveStreamIndex(0);
     setEpisodeLink('');
+    setIsResolvingStream(false);
   };
 
   const handleSwitchEpisode = (index: number) => {
@@ -330,6 +335,12 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
           videoProgress={videoProgress}
           onPlaybackError={handlePlaybackError}
         />
+      ) : isResolvingStream ? (
+        <div className="container-wrapper-movie px-4 lg:px-0">
+          <div className="w-full rounded-md border border-zinc-700 bg-zinc-900/70 p-6 text-center text-sm lg:text-base text-zinc-200">
+            Resolving stream...
+          </div>
+        </div>
       ) : (
         <div className="container-wrapper-movie px-4 lg:px-0">
           <div className="w-full rounded-md border border-zinc-700 bg-zinc-900/70 p-6 text-center text-sm lg:text-base text-zinc-200">
