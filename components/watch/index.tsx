@@ -1,10 +1,9 @@
 'use client';
 import DetailMovie from 'types/detail-movie';
 import VideoPlayer from './video-player';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { isHaveEpisodesMovie } from 'utils/movie-utils';
 import ServerSection from './server-section';
-import { useRef } from 'react';
 import ProgresswatchNotification from './progress-watch-notification';
 import { useDispatch, useSelector } from 'react-redux';
 import { setProgress } from '../../redux/slices/progress-slice';
@@ -59,7 +58,7 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRequestTokenRef = useRef(0);
-
+  const hasEpisodeSource = String(episodeLink || '').trim().length > 0;
   const stremioType = movie.movie.tmdb?.type === 'tv' ? 'series' : 'movie';
   const stremioTmdbId = String(movie.movie.tmdb?.id || '').trim();
   const stremioSeason = Number(movie.movie.tmdb?.season || 1);
@@ -68,7 +67,24 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
     return movie.episodes?.[targetServerIndex]?.server_data?.[targetEpisodeIndex]?.link_m3u8 || '';
   };
 
-  const fetchStremioCandidates = async (targetEpisodeIndex: number): Promise<StreamCandidate[]> => {
+  const resolveDefaultEpisodeLink = () => {
+    return resolveEpisodeLink(0, 0);
+  };
+
+  const requiresBlockedProxyHeaders = (raw: any) => {
+    const proxyHeaders = raw?.behaviorHints?.proxyHeaders?.request;
+    return Boolean(
+      proxyHeaders &&
+        (proxyHeaders.Referer ||
+          proxyHeaders.referer ||
+          proxyHeaders.Origin ||
+          proxyHeaders.origin ||
+          proxyHeaders['User-Agent'] ||
+          proxyHeaders['user-agent'])
+    );
+  };
+
+  const fetchAddonCandidates = async (targetEpisodeIndex: number): Promise<StreamCandidate[]> => {
     if (!stremioTmdbId) return [];
 
     try {
@@ -90,35 +106,36 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
       if (!res.ok) return [];
 
       const data = await res.json();
-      const firstWorkingUrl = String(data?.firstWorkingUrl || '').trim();
-      const playable = Array.isArray(data?.playable) ? data.playable : [];
-
-      const mapped = playable
+      const rawPlayable = Array.isArray(data?.playable) ? data.playable : [];
+      const mapped = rawPlayable
         .map((item: any) => {
-          const rawUrl = String(item?.url || item?.raw?.url || item?.raw?.externalUrl || '').trim();
-          if (!rawUrl) return null;
+          const url = String(item?.url || '').trim();
+          if (!url) return null;
 
           return {
-            url: toPlaybackUrl(rawUrl),
-            name: String(item?.name || item?.raw?.name || ''),
+            url: toPlaybackUrl(url),
+            name: String(item?.name || ''),
             title: String(item?.raw?.title || ''),
+            isBlocked: requiresBlockedProxyHeaders(item?.raw),
           };
         })
-        .filter((item: StreamCandidate | null): item is StreamCandidate => item !== null);
+        .filter(
+          (item: StreamCandidate & { isBlocked: boolean } | null): item is StreamCandidate & {
+            isBlocked: boolean;
+          } => item !== null
+        );
 
-      const ordered = firstWorkingUrl
-        ? [
-            ...mapped.filter((candidate) => candidate.url === toPlaybackUrl(firstWorkingUrl)),
-            ...mapped.filter((candidate) => candidate.url !== toPlaybackUrl(firstWorkingUrl)),
-          ]
-        : mapped;
+      const webReady = mapped.filter((item) => !item.isBlocked);
+      const ordered = webReady.length > 0 ? webReady : mapped;
 
       const seen = new Set<string>();
-      return ordered.filter((candidate) => {
-        if (seen.has(candidate.url)) return false;
-        seen.add(candidate.url);
-        return true;
-      });
+      return ordered
+        .filter((item) => {
+          if (seen.has(item.url)) return false;
+          seen.add(item.url);
+          return true;
+        })
+        .map((item) => ({ url: item.url, name: item.name, title: item.title }));
     } catch {
       return [];
     }
@@ -136,13 +153,13 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
       return;
     }
 
-    const candidates = await fetchStremioCandidates(targetEpisodeIndex);
+    const addonCandidates = await fetchAddonCandidates(targetEpisodeIndex);
     if (token !== streamRequestTokenRef.current) return;
 
-    if (candidates.length > 0) {
-      setStreamCandidates(candidates);
+    if (addonCandidates.length > 0) {
+      setStreamCandidates(addonCandidates);
       setActiveStreamIndex(0);
-      setEpisodeLink(candidates[0].url);
+      setEpisodeLink(addonCandidates[0].url);
       return;
     }
 
@@ -170,7 +187,6 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
     setEpisodeIndex(0);
     void loadEpisodeSource(0, 0);
 
-    // restore progress watching of user authenticated
     if (user) {
       restoreUserWatchProgress(user.id, movie.movie._id);
     }
@@ -180,10 +196,7 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
 
   const restoreUserWatchProgress = async (userId: string, movieId: string) => {
     const res: any = await firebaseServices.getProgressWatchOfMovie(userId, movieId);
-
-    if (!res.status) {
-      return;
-    }
+    if (!res.status) return;
 
     setPreviousWatchProgress({
       progressEpIndex: res.progressEpIndex,
@@ -191,31 +204,26 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
       progressEpLink: res.progressEpLink,
     });
 
-    setTimeout(() => {
-      setIsShowToastProgress(true);
-    }, 2000);
+    setTimeout(() => setIsShowToastProgress(true), 2000);
   };
 
-  const restoreGuestWatchProgress = (progress: any) => {
-    if (progress?.id !== movie.movie._id) return;
+  const restoreGuestWatchProgress = (guestProgress: any) => {
+    if (guestProgress?.id !== movie.movie._id) return;
 
     setPreviousWatchProgress({
-      progressEpIndex: progress.progress.episodeIndex,
-      progressTime: progress.progress.progressTime,
-      progressEpLink: progress.progress.episodeLink,
+      progressEpIndex: guestProgress.progress.episodeIndex,
+      progressTime: guestProgress.progress.progressTime,
+      progressEpLink: guestProgress.progress.episodeLink,
     });
 
-    setTimeout(() => {
-      setIsShowToastProgress(true);
-    }, 2000);
+    setTimeout(() => setIsShowToastProgress(true), 2000);
   };
 
   const handleTrackingProgressWatch = async () => {
     if (videoRef.current?.currentTime === 0) return;
 
-    // store data for user not authenticated
     if (!user) {
-      const progress = {
+      const guestProgress = {
         id: movie.movie._id,
         slug: movie.movie.slug,
         thumb_url: movie.movie.thumb_url,
@@ -229,12 +237,10 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
           episodeLink,
         },
       };
-
-      dispatch(setProgress(progress));
+      dispatch(setProgress(guestProgress));
       return;
     }
 
-    // store data for user authenticated
     const recentMovieData: IRecentMovie = {
       userId: user.id,
       id: movie.movie._id,
@@ -246,30 +252,20 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
       quality: movie.movie.quality,
       progressEpIndex: episodeIndex || 0,
       progressTime: videoRef.current?.currentTime || 0,
-      progressEpLink: episodeLink || movie.episodes[0].server_data[0].link_m3u8,
+      progressEpLink: episodeLink || resolveDefaultEpisodeLink(),
     };
 
-    // Convert the data into a JSON string
-    const jsonData = JSON.stringify(recentMovieData);
-
-    // Create a Blob with the correct MIME type
-    const blob = new Blob([jsonData], { type: 'application/json' });
-
-    // this route will handle store recent movie and progress of movie
+    const blob = new Blob([JSON.stringify(recentMovieData)], { type: 'application/json' });
     navigator.sendBeacon('/api/movies/store-recent-movie', blob);
   };
 
   useEffect(() => {
     window.addEventListener('beforeunload', handleTrackingProgressWatch);
-
-    return () => {
-      window.removeEventListener('beforeunload', handleTrackingProgressWatch);
-    };
+    return () => window.removeEventListener('beforeunload', handleTrackingProgressWatch);
   }, [episodeLink, user]);
 
   useEffect(() => {
     if (!videoRef.current || !isFirstPlay || !user) return;
-
     const videoElement = videoRef.current;
 
     const handleStoreRecentMovie = async () => {
@@ -283,7 +279,7 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
         quality: movie.movie.quality,
         progressEpIndex: progress.progress.episodeIndex || 0,
         progressTime: progress.progress.progressTime || 0,
-        progressEpLink: progress.progress.episodeLink || movie.episodes[0].server_data[0].link_m3u8,
+        progressEpLink: progress.progress.episodeLink || resolveDefaultEpisodeLink(),
       };
 
       await firebaseServices.storeRecentMovies(recentMovieData, user.id);
@@ -291,22 +287,14 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
     };
 
     videoElement.addEventListener('playing', handleStoreRecentMovie);
-
-    return () => {
-      videoElement.removeEventListener('playing', handleStoreRecentMovie);
-    };
+    return () => videoElement.removeEventListener('playing', handleStoreRecentMovie);
   }, [isFirstPlay, user]);
 
   const handleAcceptProgressWatch = () => {
+    const fallbackProgressLink = resolveEpisodeLink(serverIndex, previousWatchProgress.progressEpIndex);
     setEpisodeIndex(previousWatchProgress.progressEpIndex);
+    setEpisodeLink(previousWatchProgress.progressEpLink || fallbackProgressLink || resolveDefaultEpisodeLink());
     setVideoProgress(previousWatchProgress.progressTime);
-
-    if (previousWatchProgress.progressEpLink) {
-      setEpisodeLink(previousWatchProgress.progressEpLink);
-    } else {
-      void loadEpisodeSource(serverIndex, previousWatchProgress.progressEpIndex);
-    }
-
     setIsShowToastProgress(false);
   };
 
@@ -323,6 +311,8 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
     setEpisodeLink(nextCandidate.url);
   };
 
+  const hasMultipleServers = movie.episodes.length > 1;
+
   return (
     <div className="pt-20 lg:pt-[3.75rem] space-y-6 lg:space-y-10">
       <ProgresswatchNotification
@@ -332,14 +322,22 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
         handleRejectProgressWatch={handleRejectProgressWatch}
         movie={movie}
       />
-      <VideoPlayer
-        ref={videoRef}
-        videoUrl={episodeLink}
-        thumbnail={movie.movie.poster_url}
-        videoProgress={videoProgress}
-        onPlaybackError={handlePlaybackError}
-      />
-      {movie.episodes.length > 1 && (
+      {hasEpisodeSource ? (
+        <VideoPlayer
+          ref={videoRef}
+          videoUrl={episodeLink}
+          thumbnail={movie.movie.poster_url}
+          videoProgress={videoProgress}
+          onPlaybackError={handlePlaybackError}
+        />
+      ) : (
+        <div className="container-wrapper-movie px-4 lg:px-0">
+          <div className="w-full rounded-md border border-zinc-700 bg-zinc-900/70 p-6 text-center text-sm lg:text-base text-zinc-200">
+            No playable stream was resolved for this title.
+          </div>
+        </div>
+      )}
+      {hasMultipleServers && (
         <div className="text-center text-sm lg:text-base px-4">
           If playback is lagging, please choose one of the servers below
         </div>
