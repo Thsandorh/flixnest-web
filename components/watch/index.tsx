@@ -18,6 +18,8 @@ type StreamCandidate = {
   usesManifestProxy: boolean;
 };
 
+type ActivePlaybackSource = 'native' | 'addon';
+
 type ProxyHeaders = Partial<Record<'referer' | 'origin' | 'user-agent', string>>;
 
 const isPlaylistLikeUrl = (candidateUrl: string) => {
@@ -69,6 +71,7 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
   const [streamCandidates, setStreamCandidates] = useState<StreamCandidate[]>([]);
   const [activeStreamIndex, setActiveStreamIndex] = useState(0);
   const [isResolvingStream, setIsResolvingStream] = useState<boolean>(true);
+  const [activePlaybackSource, setActivePlaybackSource] = useState<ActivePlaybackSource>('native');
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRequestTokenRef = useRef(0);
@@ -184,30 +187,34 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
   const loadEpisodeSource = async (targetServerIndex: number, targetEpisodeIndex: number) => {
     const token = ++streamRequestTokenRef.current;
     setIsResolvingStream(true);
+    setStreamCandidates([]);
+    setActiveStreamIndex(0);
     const nativeLink = resolveEpisodeLink(targetServerIndex, targetEpisodeIndex);
 
     if (nativeLink) {
       if (token !== streamRequestTokenRef.current) return;
-      setStreamCandidates([]);
-      setActiveStreamIndex(0);
+      setActivePlaybackSource('native');
       setEpisodeLink(nativeLink);
       setIsResolvingStream(false);
-      return;
     }
 
     const addonCandidates = await fetchAddonCandidates(targetEpisodeIndex);
     if (token !== streamRequestTokenRef.current) return;
 
+    setStreamCandidates(addonCandidates);
+
+    if (nativeLink) {
+      return;
+    }
+
     if (addonCandidates.length > 0) {
-      setStreamCandidates(addonCandidates);
       setActiveStreamIndex(0);
+      setActivePlaybackSource('addon');
       setEpisodeLink(addonCandidates[0].url);
       setIsResolvingStream(false);
       return;
     }
 
-    setStreamCandidates([]);
-    setActiveStreamIndex(0);
     setEpisodeLink('');
     setIsResolvingStream(false);
   };
@@ -225,6 +232,16 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
     setEpisodeIndex(0);
     setVideoProgress(null);
     void loadEpisodeSource(index, 0);
+  };
+
+  const handleSetAddonSource = (index: number) => {
+    const selectedCandidate = streamCandidates[index];
+    if (!selectedCandidate) return;
+
+    setVideoProgress(null);
+    setActiveStreamIndex(index);
+    setActivePlaybackSource('addon');
+    setEpisodeLink(selectedCandidate.url);
   };
 
   useEffect(() => {
@@ -352,10 +369,11 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
     if (!nextCandidate) return;
 
     setActiveStreamIndex(nextIndex);
+    setActivePlaybackSource('addon');
     setEpisodeLink(nextCandidate.url);
   };
 
-  const hasMultipleServers = movie.episodes.length > 1;
+  const hasMultipleServers = movie.episodes.length + streamCandidates.length > 1;
 
   return (
     <div className="pt-20 lg:pt-[3.75rem] space-y-6 lg:space-y-10">
@@ -443,7 +461,11 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
       <ServerSection
         movie={movie}
         serverIndex={serverIndex}
+        streamCandidates={streamCandidates}
+        activeStreamIndex={activeStreamIndex}
+        activePlaybackSource={activePlaybackSource}
         handleSetServerIndex={handleSetServerIndex}
+        handleSetAddonSource={handleSetAddonSource}
       />
       <div className="container-wrapper-movie px-4 lg:px-0">
         <h1 className="text-xl lg:text-3xl">{movie.movie.name}</h1>
