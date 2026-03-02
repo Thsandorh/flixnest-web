@@ -9,6 +9,15 @@ type StremioStream = {
   behaviorHints?: Record<string, unknown>;
 };
 
+type AddonConfig = {
+  baseUrl: string;
+  displayName: string;
+  usesPrimaryAuth: boolean;
+};
+
+const DEFAULT_NUVIO_ADDON_BASE_URL =
+  'https://nuviostreams.hayd.uk/providers=vidzee,vidsrc,vixsrc/manifest.json';
+
 const isLikelyPlayable = async (url: string, timeoutMs = 5000) => {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -51,6 +60,36 @@ const buildStreamEndpoint = (baseUrl: string, type: string, id: string) => {
   return `${cleanBase}/stream/${encodeURIComponent(type)}/${encodeURIComponent(id)}.json`;
 };
 
+const buildAddonConfigs = (primaryAddonBaseUrl: string | undefined) => {
+  const rawExtraBaseUrls = String(process.env.STREMIO_ADDON_BASE_URLS || '')
+    .split(/[\n,]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  const rawCandidates = [
+    primaryAddonBaseUrl?.trim() || '',
+    ...rawExtraBaseUrls,
+    DEFAULT_NUVIO_ADDON_BASE_URL,
+  ].filter(Boolean);
+
+  const seen = new Set<string>();
+  const primaryNormalized = primaryAddonBaseUrl ? normalizeAddonBaseUrl(primaryAddonBaseUrl) : '';
+
+  return rawCandidates
+    .map((rawBaseUrl, index) => {
+      const normalizedBaseUrl = normalizeAddonBaseUrl(rawBaseUrl);
+      if (seen.has(normalizedBaseUrl)) return null;
+      seen.add(normalizedBaseUrl);
+
+      return {
+        baseUrl: normalizedBaseUrl,
+        displayName: index === 0 && primaryNormalized === normalizedBaseUrl ? 'Flix Streams' : 'Nuvio',
+        usesPrimaryAuth: Boolean(primaryNormalized && normalizedBaseUrl === primaryNormalized),
+      } satisfies AddonConfig;
+    })
+    .filter((item): item is AddonConfig => item !== null);
+};
+
 export async function GET(request: NextRequest) {
   try {
     const type = request.nextUrl.searchParams.get('type');
@@ -69,10 +108,11 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const addonBaseUrl = process.env.STREMIO_ADDON_BASE_URL;
-    if (!addonBaseUrl) {
+    const primaryAddonBaseUrl = process.env.STREMIO_ADDON_BASE_URL;
+    const addonConfigs = buildAddonConfigs(primaryAddonBaseUrl);
+    if (addonConfigs.length === 0) {
       return NextResponse.json(
-        { error: 'Missing env: STREMIO_ADDON_BASE_URL' },
+        { error: 'Missing addon configuration' },
         { status: 500 }
       );
     }
@@ -83,22 +123,6 @@ export async function GET(request: NextRequest) {
     const addonRequestUserAgent =
       process.env.STREMIO_REQUEST_USER_AGENT ||
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
-    const normalizedAddonBaseUrl = normalizeAddonBaseUrl(addonBaseUrl);
-    const addonOrigin = new URL(normalizedAddonBaseUrl).origin;
-
-    const baseHeaders: Record<string, string> = {
-      accept: 'application/json,text/plain,*/*',
-      'user-agent': addonRequestUserAgent,
-      'accept-language': 'en-US,en;q=0.9',
-      'accept-encoding': 'identity',
-      'cache-control': 'no-cache',
-      pragma: 'no-cache',
-      referer: `${addonOrigin}/`,
-      origin: addonOrigin,
-      'sec-fetch-site': 'same-origin',
-      'sec-fetch-mode': 'cors',
-      'sec-fetch-dest': 'empty',
-    };
 
     const isSeries = type === 'series';
     const appendSeasonEpisode = (base: string) => {
@@ -152,59 +176,91 @@ export async function GET(request: NextRequest) {
     let endpointUsed = '';
     let usedId = '';
     let playable: Array<{ name: string; url: string; raw: StremioStream }> = [];
+    const attemptedEndpoints: string[] = [];
     let lastError: { status: number; statusText: string; body: string } | null = null;
 
-    for (const currentId of idCandidates) {
-      const endpoint = new URL(buildStreamEndpoint(normalizedAddonBaseUrl, type, currentId));
-      if (token) {
-        endpoint.searchParams.set(tokenQueryParam, token);
+    for (const addon of addonConfigs) {
+      const addonOrigin = new URL(addon.baseUrl).origin;
+      const baseHeaders: Record<string, string> = {
+        accept: 'application/json,text/plain,*/*',
+        'user-agent': addonRequestUserAgent,
+        'accept-language': 'en-US,en;q=0.9',
+        'accept-encoding': 'identity',
+        'cache-control': 'no-cache',
+        pragma: 'no-cache',
+        referer: `${addonOrigin}/`,
+        origin: addonOrigin,
+        'sec-fetch-site': 'same-origin',
+        'sec-fetch-mode': 'cors',
+        'sec-fetch-dest': 'empty',
+      };
+
+      for (const currentId of idCandidates) {
+        const endpoint = new URL(buildStreamEndpoint(addon.baseUrl, type, currentId));
+        attemptedEndpoints.push(endpoint.toString());
+
+        if (addon.usesPrimaryAuth && token) {
+          endpoint.searchParams.set(tokenQueryParam, token);
+        }
+
+        const headers: Record<string, string> = { ...baseHeaders };
+        if (addon.usesPrimaryAuth && token && tokenHeaderName) {
+          headers[tokenHeaderName] = token;
+        }
+
+        const response = await fetch(endpoint.toString(), {
+          method: 'GET',
+          headers,
+          cache: 'no-store',
+          redirect: 'follow',
+        });
+
+        if (!response.ok) {
+          lastError = {
+            status: response.status,
+            statusText: response.statusText,
+            body: await response.text(),
+          };
+          continue;
+        }
+
+        const payload = (await response.json()) as { streams?: StremioStream[] };
+        const streams = Array.isArray(payload?.streams) ? payload.streams : [];
+        const resolvedStreams = streams
+          .map((stream) => ({
+            name: stream.name ? `${addon.displayName} · ${stream.name}` : addon.displayName,
+            url:
+              stream.url ||
+              stream.externalUrl ||
+              (stream.ytId ? `https://www.youtube.com/watch?v=${stream.ytId}` : ''),
+            raw: stream,
+          }))
+          .filter((item) => item.url);
+
+        if (resolvedStreams.length === 0) {
+          continue;
+        }
+
+        if (!endpointUsed) {
+          endpointUsed = endpoint.toString();
+          usedId = currentId;
+        }
+
+        playable.push(...resolvedStreams);
+        break;
       }
-
-      const headers: Record<string, string> = { ...baseHeaders };
-      if (token && tokenHeaderName) {
-        headers[tokenHeaderName] = token;
-      }
-
-      const response = await fetch(endpoint.toString(), {
-        method: 'GET',
-        headers,
-        cache: 'no-store',
-        redirect: 'follow',
-      });
-
-      if (!response.ok) {
-        lastError = {
-          status: response.status,
-          statusText: response.statusText,
-          body: await response.text(),
-        };
-        continue;
-      }
-
-      const payload = (await response.json()) as { streams?: StremioStream[] };
-      const streams = Array.isArray(payload?.streams) ? payload.streams : [];
-
-      playable = streams
-        .map((stream) => ({
-          name: stream.name || stream.title || 'stream',
-          url:
-            stream.url ||
-            stream.externalUrl ||
-            (stream.ytId ? `https://www.youtube.com/watch?v=${stream.ytId}` : ''),
-          raw: stream,
-        }))
-        .filter((item) => item.url);
-
-      endpointUsed = endpoint.toString();
-      usedId = currentId;
-      if (playable.length > 0) break;
     }
+
+    const dedupedPlayable = playable.filter((item, index, allItems) => {
+      return allItems.findIndex((candidate) => candidate.url === item.url) === index;
+    });
 
     if (!endpointUsed) {
       return NextResponse.json(
         {
           error: 'Stremio addon request failed',
           attemptedIds: idCandidates,
+          attemptedEndpoints,
           lastError,
         },
         { status: 502 }
@@ -212,7 +268,7 @@ export async function GET(request: NextRequest) {
     }
 
     let firstWorkingUrl = '';
-    for (const candidate of playable) {
+    for (const candidate of dedupedPlayable) {
       // Find the first stream URL that responds successfully.
       if (await isLikelyPlayable(candidate.url)) {
         firstWorkingUrl = candidate.url;
@@ -226,9 +282,10 @@ export async function GET(request: NextRequest) {
         requested: { type, id },
         usedId,
         endpoint: endpointUsed,
-        count: playable.length,
+        endpoints: attemptedEndpoints,
+        count: dedupedPlayable.length,
         firstWorkingUrl,
-        playable,
+        playable: dedupedPlayable,
       },
       { status: 200 }
     );
