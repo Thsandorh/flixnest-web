@@ -15,7 +15,10 @@ type StreamCandidate = {
   url: string;
   name: string;
   title: string;
+  usesManifestProxy: boolean;
 };
+
+type ProxyHeaders = Partial<Record<'referer' | 'origin' | 'user-agent', string>>;
 
 const isPlaylistLikeUrl = (candidateUrl: string) => {
   const normalized = String(candidateUrl || '').trim().toLowerCase();
@@ -29,9 +32,19 @@ const isPlaylistLikeUrl = (candidateUrl: string) => {
   }
 };
 
-const toPlaybackUrl = (candidateUrl: string) => {
+const toPlaybackUrl = (candidateUrl: string, proxyHeaders?: ProxyHeaders) => {
+  const hasProxyHeaders = Boolean(proxyHeaders && Object.keys(proxyHeaders).length > 0);
   if (!isPlaylistLikeUrl(candidateUrl)) return candidateUrl;
-  return `/api/media/playlist?url=${encodeURIComponent(candidateUrl)}`;
+
+  const params = new URLSearchParams({
+    url: candidateUrl,
+  });
+
+  if (hasProxyHeaders) {
+    params.set('headers', JSON.stringify(proxyHeaders));
+  }
+
+  return `/api/media/playlist?${params.toString()}`;
 };
 
 export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
@@ -72,17 +85,29 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
     return resolveEpisodeLink(0, 0);
   };
 
-  const requiresBlockedProxyHeaders = (raw: any) => {
-    const proxyHeaders = raw?.behaviorHints?.proxyHeaders?.request;
-    return Boolean(
-      proxyHeaders &&
-        (proxyHeaders.Referer ||
-          proxyHeaders.referer ||
-          proxyHeaders.Origin ||
-          proxyHeaders.origin ||
-          proxyHeaders['User-Agent'] ||
-          proxyHeaders['user-agent'])
-    );
+  const extractProxyHeaders = (raw: any): ProxyHeaders | undefined => {
+    const requestHeaders = raw?.behaviorHints?.proxyHeaders?.request;
+    if (!requestHeaders || typeof requestHeaders !== 'object') return undefined;
+
+    const normalized: ProxyHeaders = {};
+
+    const referer = requestHeaders.Referer || requestHeaders.referer;
+    const origin = requestHeaders.Origin || requestHeaders.origin;
+    const userAgent = requestHeaders['User-Agent'] || requestHeaders['user-agent'];
+
+    if (typeof referer === 'string' && referer.trim()) {
+      normalized.referer = referer.trim();
+    }
+
+    if (typeof origin === 'string' && origin.trim()) {
+      normalized.origin = origin.trim();
+    }
+
+    if (typeof userAgent === 'string' && userAgent.trim()) {
+      normalized['user-agent'] = userAgent.trim();
+    }
+
+    return Object.keys(normalized).length > 0 ? normalized : undefined;
   };
 
   const fetchAddonCandidates = async (targetEpisodeIndex: number): Promise<StreamCandidate[]> => {
@@ -113,30 +138,44 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
           const url = String(item?.url || '').trim();
           if (!url) return null;
 
+          const proxyHeaders = extractProxyHeaders(item?.raw);
+          const usesManifestProxy = isPlaylistLikeUrl(url);
+
           return {
-            url: toPlaybackUrl(url),
+            url: toPlaybackUrl(url, proxyHeaders),
             name: String(item?.name || ''),
             title: String(item?.raw?.title || ''),
-            isBlocked: requiresBlockedProxyHeaders(item?.raw),
+            usesManifestProxy,
+            hasProxyHeaders: Boolean(proxyHeaders),
           };
         })
         .filter(
-          (item: StreamCandidate & { isBlocked: boolean } | null): item is StreamCandidate & {
-            isBlocked: boolean;
+          (item: (StreamCandidate & { hasProxyHeaders: boolean }) | null): item is StreamCandidate & {
+            hasProxyHeaders: boolean;
           } => item !== null
         );
 
-      const webReady = mapped.filter((item: StreamCandidate & { isBlocked: boolean }) => !item.isBlocked);
-      const ordered = webReady.length > 0 ? webReady : mapped;
+      const ordered = [...mapped].sort(
+        (left: StreamCandidate & { hasProxyHeaders: boolean }, right: StreamCandidate & { hasProxyHeaders: boolean }) => {
+          const leftPriority = left.hasProxyHeaders ? (left.usesManifestProxy ? 1 : 2) : 0;
+          const rightPriority = right.hasProxyHeaders ? (right.usesManifestProxy ? 1 : 2) : 0;
+          return leftPriority - rightPriority;
+        }
+      );
 
       const seen = new Set<string>();
       return ordered
-        .filter((item: StreamCandidate & { isBlocked: boolean }) => {
+        .filter((item: StreamCandidate & { hasProxyHeaders: boolean }) => {
           if (seen.has(item.url)) return false;
           seen.add(item.url);
           return true;
         })
-        .map((item: StreamCandidate & { isBlocked: boolean }) => ({ url: item.url, name: item.name, title: item.title }));
+        .map((item: StreamCandidate & { hasProxyHeaders: boolean }) => ({
+          url: item.url,
+          name: item.name,
+          title: item.title,
+          usesManifestProxy: item.usesManifestProxy,
+        }));
     } catch {
       return [];
     }
