@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+import { withBasePath } from 'utils/base-path';
 
 const SERVICE_RETRY_DELAY_MS = 5_000;
 const DEFAULT_USER_AGENT =
@@ -9,7 +10,7 @@ type AllowedProxyHeaderName = (typeof ALLOWED_PROXY_HEADER_NAMES)[number];
 type AllowedProxyHeaders = Partial<Record<AllowedProxyHeaderName, string>>;
 
 function buildProxyUrl(request: NextRequest, targetUrl: string) {
-  const proxyUrl = new URL('/api/media/playlist', request.nextUrl.origin);
+  const proxyUrl = new URL(withBasePath('/api/media/playlist'), request.nextUrl.origin);
   proxyUrl.searchParams.set('url', targetUrl);
 
   const rawHeaders = request.nextUrl.searchParams.get('headers');

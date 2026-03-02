@@ -10,6 +10,7 @@ import { setProgress } from '../../redux/slices/progress-slice';
 import CommentSection from '../comment';
 import { IRecentMovie } from 'types/recent-movie';
 import firebaseServices from 'services/firebase-services';
+import { withBasePath } from 'utils/base-path';
 
 type StreamCandidate = {
   url: string;
@@ -47,7 +48,7 @@ const toPlaybackUrl = (candidateUrl: string, proxyHeaders?: ProxyHeaders) => {
     params.set('headers', JSON.stringify(proxyHeaders));
   }
 
-  return `/api/media/playlist?${params.toString()}`;
+  return withBasePath(`/api/media/playlist?${params.toString()}`);
 };
 
 export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
@@ -118,7 +119,7 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
     if (!stremioTmdbId) return [];
 
     try {
-      const endpoint = new URL('/api/streams/stremio', window.location.origin);
+      const endpoint = new URL(withBasePath('/api/streams/stremio'), window.location.origin);
       endpoint.searchParams.set('type', stremioType);
       endpoint.searchParams.set('id', stremioTmdbId);
       endpoint.searchParams.set('tmdbId', stremioTmdbId);
@@ -320,7 +321,7 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
     };
 
     const blob = new Blob([JSON.stringify(recentMovieData)], { type: 'application/json' });
-    navigator.sendBeacon('/api/movies/store-recent-movie', blob);
+    navigator.sendBeacon(withBasePath('/api/movies/store-recent-movie'), blob);
   };
 
   useEffect(() => {

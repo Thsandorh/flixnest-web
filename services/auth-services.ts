@@ -1,9 +1,10 @@
 import { signUpValidationSchemaType } from 'schemas/signup-validation-schema';
 import { LoginValidationSchemaType } from 'schemas/login-validation-schema';
+import { withBasePath } from 'utils/base-path';
 
 const AuthServices = {
   signUp: async (data: signUpValidationSchemaType) => {
-    const res = await fetch('/api/auth/signup', {
+    const res = await fetch(withBasePath('/api/auth/signup'), {
       method: 'POST',
       headers: {
         Accept: 'application/json',
@@ -16,7 +17,7 @@ const AuthServices = {
   },
 
   login: async (data: LoginValidationSchemaType) => {
-    const res = await fetch('/api/auth/login', {
+    const res = await fetch(withBasePath('/api/auth/login'), {
       method: 'POST',
       headers: {
         Accept: 'application/json',
@@ -29,7 +30,7 @@ const AuthServices = {
   },
 
   setAuthCookie: async (data: any) => {
-    const res = await fetch('/api/auth/set-auth-cookie', {
+    const res = await fetch(withBasePath('/api/auth/set-auth-cookie'), {
       method: 'POST',
       headers: {
         Accept: 'application/json',
@@ -42,7 +43,7 @@ const AuthServices = {
   },
 
   updateProfile: async (data: { userId: string; name: string; email: string; photo?: string }) => {
-    const res = await fetch('/api/users/me', {
+    const res = await fetch(withBasePath('/api/users/me'), {
       method: 'PATCH',
       headers: {
         Accept: 'application/json',
@@ -58,7 +59,7 @@ const AuthServices = {
     currentPassword: string;
     newPassword: string;
   }) => {
-    const res = await fetch('/api/auth/change-password', {
+    const res = await fetch(withBasePath('/api/auth/change-password'), {
       method: 'POST',
       headers: {
         Accept: 'application/json',
@@ -70,7 +71,7 @@ const AuthServices = {
   },
 
   removeAuthCookie: async () => {
-    const res = await fetch('/api/auth/remove-auth-cookie');
+    const res = await fetch(withBasePath('/api/auth/remove-auth-cookie'));
     return res;
   },
 };

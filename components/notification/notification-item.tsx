@@ -24,7 +24,7 @@ export default function NotificationItem({ notification }: { notification: INoti
           handleReadedNotification(notification);
         }
       }}
-      href={`${window.location.origin}/movies/${notification.movieSlug}`}
+      href={`/movies/${notification.movieSlug}`}
       className={`${
         !notification.read && 'bg-[#2a1313]'
       } flex pl-2 pr-4 py-2 items-center rounded-lg`}

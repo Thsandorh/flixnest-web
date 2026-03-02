@@ -4,6 +4,7 @@ import DetailMovie from 'types/detail-movie';
 import { toast } from 'react-toastify';
 import { IRecentMovie } from 'types/recent-movie';
 import MovieCollection from 'types/movie-collection';
+import { withBasePath } from 'utils/base-path';
 
 async function safeJson<T>(res: Response): Promise<T | null> {
   try {
@@ -16,7 +17,7 @@ async function safeJson<T>(res: Response): Promise<T | null> {
 const firebaseServices = {
   getMovieCollection: async (userId: string) => {
     try {
-      const res = await fetch(`/api/collection?userId=${encodeURIComponent(userId)}`);
+      const res = await fetch(withBasePath(`/api/collection?userId=${encodeURIComponent(userId)}`));
       if (!res.ok) return [];
       const data = await safeJson<{ movies: MovieCollection[] }>(res);
       return data?.movies ?? [];
@@ -28,7 +29,7 @@ const firebaseServices = {
   },
 
   addMovieToCollection: async (userId: string, movie: MovieCollection) => {
-    const res = await fetch('/api/collection', {
+    const res = await fetch(withBasePath('/api/collection'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId, movie }),
@@ -37,7 +38,7 @@ const firebaseServices = {
   },
 
   removeMovieFromCollection: async (userId: string, movieId: string) => {
-    const res = await fetch('/api/collection', {
+    const res = await fetch(withBasePath('/api/collection'), {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId, movieId }),
@@ -47,7 +48,7 @@ const firebaseServices = {
 
   getMovieComments: async (movieId: string) => {
     try {
-      const res = await fetch(`/api/comments/${encodeURIComponent(movieId)}`);
+      const res = await fetch(withBasePath(`/api/comments/${encodeURIComponent(movieId)}`));
       if (!res.ok) return [];
       const data = await safeJson<{ comments: IComment[] }>(res);
       return data?.comments ?? [];
@@ -60,7 +61,7 @@ const firebaseServices = {
 
   addMovieComment: async (movieId: string, newComment: IComment) => {
     try {
-      const res = await fetch(`/api/comments/${encodeURIComponent(movieId)}`, {
+      const res = await fetch(withBasePath(`/api/comments/${encodeURIComponent(movieId)}`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newComment),
@@ -78,7 +79,7 @@ const firebaseServices = {
 
   editMovieComment: async (movieId: string, editedCommentText: string, commentId: string) => {
     try {
-      await fetch(`/api/comments/${encodeURIComponent(movieId)}/${encodeURIComponent(commentId)}`, {
+      await fetch(withBasePath(`/api/comments/${encodeURIComponent(movieId)}/${encodeURIComponent(commentId)}`), {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: editedCommentText }),
@@ -93,7 +94,7 @@ const firebaseServices = {
 
   deleteMovieComment: async (movieId: string, commentId: string) => {
     try {
-      await fetch(`/api/comments/${encodeURIComponent(movieId)}/${encodeURIComponent(commentId)}`, {
+      await fetch(withBasePath(`/api/comments/${encodeURIComponent(movieId)}/${encodeURIComponent(commentId)}`), {
         method: 'DELETE',
       });
     } catch (error: any) {
@@ -105,7 +106,7 @@ const firebaseServices = {
   likeComment: async (movieId: string, userId: string, comment: IComment) => {
     try {
       await fetch(
-        `/api/comments/${encodeURIComponent(movieId)}/${encodeURIComponent(comment.id!)}/like`,
+        withBasePath(`/api/comments/${encodeURIComponent(movieId)}/${encodeURIComponent(comment.id!)}/like`),
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -121,7 +122,7 @@ const firebaseServices = {
   unlikeComment: async (movieId: string, userId: string, comment: IComment) => {
     try {
       await fetch(
-        `/api/comments/${encodeURIComponent(movieId)}/${encodeURIComponent(comment.id!)}/like`,
+        withBasePath(`/api/comments/${encodeURIComponent(movieId)}/${encodeURIComponent(comment.id!)}/like`),
         {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
@@ -148,7 +149,7 @@ const firebaseServices = {
         read: false,
       };
 
-      await fetch('/api/notifications', {
+      await fetch(withBasePath('/api/notifications'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(notification),
@@ -161,7 +162,7 @@ const firebaseServices = {
 
   deleteNotification: async (userReciveId: string, userCreatedId: string) => {
     try {
-      await fetch('/api/notifications', {
+      await fetch(withBasePath('/api/notifications'), {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userReciveId, userCreatedId }),
@@ -172,7 +173,7 @@ const firebaseServices = {
   },
 
   readedNotification: async (notification: INotification) => {
-    await fetch('/api/notifications/read', {
+    await fetch(withBasePath('/api/notifications/read'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: notification.id, userReciveId: notification.userReciveId }),
@@ -184,7 +185,7 @@ const firebaseServices = {
     handleReciveNotificationData: (notifications: INotification[]) => void
   ) => {
     const fetchNotifications = async () => {
-      const res = await fetch(`/api/notifications?userId=${encodeURIComponent(userId)}`);
+      const res = await fetch(withBasePath(`/api/notifications?userId=${encodeURIComponent(userId)}`));
       if (!res.ok) return;
       const data = await safeJson<{ notifications: INotification[] }>(res);
       handleReciveNotificationData(data?.notifications ?? []);
@@ -197,7 +198,7 @@ const firebaseServices = {
 
   storeRecentMovies: async (recentMovie: IRecentMovie, userId: string) => {
     try {
-      await fetch('/api/recent', {
+      await fetch(withBasePath('/api/recent'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, recentMovie }),
@@ -209,7 +210,7 @@ const firebaseServices = {
 
   getRecentMovies: async (userId: string) => {
     try {
-      const res = await fetch(`/api/recent?userId=${encodeURIComponent(userId)}`);
+      const res = await fetch(withBasePath(`/api/recent?userId=${encodeURIComponent(userId)}`));
       if (!res.ok) return [];
       const data = await safeJson<{ movies: IRecentMovie[] }>(res);
       return data?.movies ?? [];
@@ -222,7 +223,9 @@ const firebaseServices = {
   getProgressWatchOfMovie: async (userId: string, movieId: string) => {
     try {
       const res = await fetch(
-        `/api/recent/progress?userId=${encodeURIComponent(userId)}&movieId=${encodeURIComponent(movieId)}`
+        withBasePath(
+          `/api/recent/progress?userId=${encodeURIComponent(userId)}&movieId=${encodeURIComponent(movieId)}`
+        )
       );
       if (!res.ok) return { status: false };
       const data = await safeJson<{ status: boolean } & Record<string, unknown>>(res);
