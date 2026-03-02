@@ -15,6 +15,7 @@ type StreamCandidate = {
   url: string;
   name: string;
   title: string;
+  provider: string;
   usesManifestProxy: boolean;
 };
 
@@ -148,6 +149,7 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
             url: toPlaybackUrl(url, proxyHeaders),
             name: String(item?.name || ''),
             title: String(item?.raw?.title || ''),
+            provider: String(item?.provider || ''),
             usesManifestProxy,
             hasProxyHeaders: Boolean(proxyHeaders),
           };
@@ -177,6 +179,7 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
           url: item.url,
           name: item.name,
           title: item.title,
+          provider: item.provider,
           usesManifestProxy: item.usesManifestProxy,
         }));
     } catch {

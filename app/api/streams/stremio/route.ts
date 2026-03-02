@@ -9,6 +9,13 @@ type StremioStream = {
   behaviorHints?: Record<string, unknown>;
 };
 
+type ResolvedPlayable = {
+  name: string;
+  url: string;
+  raw: StremioStream;
+  provider: string;
+};
+
 type AddonConfig = {
   baseUrl: string;
   displayName: string;
@@ -175,7 +182,7 @@ export async function GET(request: NextRequest) {
 
     let endpointUsed = '';
     let usedId = '';
-    let playable: Array<{ name: string; url: string; raw: StremioStream }> = [];
+    let playable: ResolvedPlayable[] = [];
     const attemptedEndpoints: string[] = [];
     let lastError: { status: number; statusText: string; body: string } | null = null;
 
@@ -228,12 +235,13 @@ export async function GET(request: NextRequest) {
         const streams = Array.isArray(payload?.streams) ? payload.streams : [];
         const resolvedStreams = streams
           .map((stream) => ({
-            name: stream.name ? `${addon.displayName} · ${stream.name}` : addon.displayName,
+            name: stream.name || stream.title || addon.displayName,
             url:
               stream.url ||
               stream.externalUrl ||
               (stream.ytId ? `https://www.youtube.com/watch?v=${stream.ytId}` : ''),
             raw: stream,
+            provider: addon.displayName,
           }))
           .filter((item) => item.url);
 

@@ -4,6 +4,7 @@ import { FaCheck } from 'react-icons/fa6';
 type StreamCandidate = {
   name: string;
   title: string;
+  provider: string;
   usesManifestProxy: boolean;
 };
 
@@ -107,6 +108,11 @@ export default function ServerSection({
             const addonLabel = item.name || `Addon source ${index + 1}`;
             const addonMeta = item.usesManifestProxy ? 'Manifest proxy path' : 'Direct browser stream';
             const addonTitle = item.title.trim();
+            const providerLabel = item.provider || 'Addon';
+            const providerClasses =
+              providerLabel === 'Nuvio'
+                ? 'border-emerald-300/20 bg-emerald-300/12 text-emerald-100'
+                : 'border-sky-300/20 bg-sky-300/12 text-sky-100';
 
             return (
               <button
@@ -129,7 +135,14 @@ export default function ServerSection({
                       Source {String(index + 1).padStart(2, '0')}
                     </div>
                     <div>
-                      <div className="text-base font-semibold tracking-tight lg:text-lg">{addonLabel}</div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="text-base font-semibold tracking-tight lg:text-lg">{addonLabel}</div>
+                        <span
+                          className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] ${providerClasses}`}
+                        >
+                          {providerLabel}
+                        </span>
+                      </div>
                       <div className="mt-1 text-sm text-zinc-400">
                         {addonTitle || addonMeta}
                       </div>
