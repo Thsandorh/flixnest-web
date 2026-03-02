@@ -30,7 +30,7 @@ export default function Comment({
 
   useEffect(() => {
     setCommentText(comment.text);
-  }, [comment]);
+  }, [comment.text]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -48,7 +48,7 @@ export default function Comment({
     document.addEventListener('keydown', handleKeyDown);
 
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isCommentEditing, commentText]);
+  }, [isCommentEditing, commentText, comment.text]);
 
   return (
     <div className="p-3 rounded-lg shadow-sm">

@@ -2,6 +2,7 @@ import { FaPlay } from 'react-icons/fa';
 import MovieSummary from '../movie/movie-summary';
 import BtnAddToCollection from '../buttons/btn-add-to-collection';
 import DetailMovie from 'types/detail-movie';
+import Image from 'next/image';
 import TMDBLogo from '../logos/TMDB-Logo';
 import Category from 'types/category';
 import { GoDotFill } from 'react-icons/go';
@@ -9,6 +10,8 @@ import Link from 'next/link';
 import resolveImageUrl from 'utils/image-url';
 
 export default function HeroMovieItem({ detailMovie }: { detailMovie: DetailMovie }) {
+  const posterUrl = resolveImageUrl(detailMovie.movie.poster_url);
+
   const movieCategory = detailMovie.movie.category.map((item: Category, index) => (
     <span key={index}>
       {item.name}
@@ -17,10 +20,16 @@ export default function HeroMovieItem({ detailMovie }: { detailMovie: DetailMovi
   ));
 
   return (
-    <div
-      className="container-wrapper relative w-full h-screen bg-cover bg-center"
-      style={{ backgroundImage: `url(${resolveImageUrl(detailMovie.movie.poster_url)})` }}
-    >
+    <div className="container-wrapper relative w-full h-screen">
+      {posterUrl && (
+        <Image
+          src={posterUrl}
+          alt={`${detailMovie.movie.name} backdrop`}
+          fill
+          sizes="100vw"
+          className="object-cover object-center"
+        />
+      )}
       <div className="absolute inset-0 bg-black opacity-45"></div>
       <div className="absolute inset-0 bg-gradient-to-r from-black to-50%"></div>
       <div className="absolute inset-0 bg-gradient-to-b from-black to-10%"></div>

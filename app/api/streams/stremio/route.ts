@@ -67,6 +67,57 @@ const buildStreamEndpoint = (baseUrl: string, type: string, id: string) => {
   return `${cleanBase}/stream/${encodeURIComponent(type)}/${encodeURIComponent(id)}.json`;
 };
 
+const normalizePathPrefix = (value: string) => {
+  const raw = String(value || '').trim();
+  if (!raw || raw === '/') return '';
+  const withLeading = raw.startsWith('/') ? raw : `/${raw}`;
+  return withLeading.replace(/\/+$/, '');
+};
+
+const looksLikeAddonLocalPath = (path: string) => {
+  const normalized = String(path || '').trim().toLowerCase();
+  if (!normalized.startsWith('/')) return false;
+  if (/^\/(api|stream|meta|catalog|debug)(\/|$)/.test(normalized)) return true;
+  if (['/manifest.json', '/configure', '/faq', '/showcase.gif'].includes(normalized)) return true;
+  if (/^\/[a-z0-9_-]{16,}\/(?:manifest\.json|configure|faq)(?:$|\/)/.test(normalized)) return true;
+  if (/^\/[a-z0-9_-]{16,}\/(?:stream|meta|catalog)\//.test(normalized)) return true;
+  return false;
+};
+
+const normalizeAddonStreamUrl = (rawUrl: string, addonBaseUrl: string) => {
+  const input = String(rawUrl || '').trim();
+  if (!input) return input;
+
+  const addonBase = new URL(addonBaseUrl);
+  const addonOrigin = addonBase.origin;
+  const addonPrefix = normalizePathPrefix(addonBase.pathname);
+
+  if (input.startsWith('/')) {
+    if (addonPrefix && (input === addonPrefix || input.startsWith(`${addonPrefix}/`))) {
+      return `${addonOrigin}${input}`;
+    }
+    return `${addonOrigin}${addonPrefix}${input}`;
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(input);
+  } catch {
+    return input;
+  }
+
+  if (!['http:', 'https:'].includes(parsed.protocol)) return input;
+  if (parsed.origin !== addonOrigin) return input;
+  if (!addonPrefix) return input;
+
+  const path = parsed.pathname || '/';
+  if (path === addonPrefix || path.startsWith(`${addonPrefix}/`)) return input;
+  if (!looksLikeAddonLocalPath(path)) return input;
+
+  parsed.pathname = `${addonPrefix}${path.startsWith('/') ? path : `/${path}`}`;
+  return parsed.toString();
+};
+
 const buildAddonConfigs = (primaryAddonBaseUrl: string | undefined) => {
   const rawExtraBaseUrls = String(process.env.STREMIO_ADDON_BASE_URLS || '')
     .split(/[\n,]/)
@@ -236,10 +287,12 @@ export async function GET(request: NextRequest) {
         const resolvedStreams = streams
           .map((stream) => ({
             name: stream.name || stream.title || addon.displayName,
-            url:
+            url: normalizeAddonStreamUrl(
               stream.url ||
               stream.externalUrl ||
               (stream.ytId ? `https://www.youtube.com/watch?v=${stream.ytId}` : ''),
+              addon.baseUrl
+            ),
             raw: stream,
             provider: addon.displayName,
           }))

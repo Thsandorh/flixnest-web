@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import CommentInput from './comment-input';
 import { useSelector } from 'react-redux';
 import firebaseServices from 'services/firebase-services';
@@ -17,15 +17,15 @@ export default function CommentSection({ movie }: { movie: DetailMovie }) {
     setAuthenticatedUser(user);
   }, [user]);
 
-  useEffect(() => {
-    getMovieComments();
-  }, []);
-
-  const getMovieComments = async () => {
+  const getMovieComments = useCallback(async () => {
     const commentsResponse = await firebaseServices.getMovieComments(movie.movie._id);
     setComments(commentsResponse);
     setIsFetchingComments(false);
-  };
+  }, [movie.movie._id]);
+
+  useEffect(() => {
+    void getMovieComments();
+  }, [getMovieComments]);
 
   return (
     <>

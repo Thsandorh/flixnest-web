@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+﻿import { useCallback, useEffect, useState } from 'react';
 import NotificationDropDown from './notification-dropdown';
 import NotificationIcon from './notification-icon';
 import NotificationMobile from './notification-mobile';
@@ -23,6 +23,19 @@ export default function Notification({
   const [notifications, setNotifications] = useState<INotification[] | []>([]);
   const [notificationsUnreadCount, setNotificationUnreadCount] = useState<number>(0);
 
+  const handleReciveNotificationData = useCallback((notifications: INotification[]) => {
+    let tempCount = 0;
+
+    notifications.forEach((item: INotification) => {
+      if (!item.read) {
+        tempCount++;
+      }
+    });
+
+    setNotificationUnreadCount(tempCount);
+    setNotifications(notifications);
+  }, []);
+
   useEffect(() => {
     if (!user) return;
     let unsubscribe: (() => void) | undefined = undefined;
@@ -34,28 +47,15 @@ export default function Notification({
       );
     };
 
-    fetchNotifications();
+    void fetchNotifications();
 
     return () => {
       if (unsubscribe) {
-        console.log('🛑 Unsubscribing from notifications...');
+        console.log('Unsubscribing from notifications...');
         unsubscribe();
       }
     };
-  }, []);
-
-  const handleReciveNotificationData = (notifications: INotification[]) => {
-    let tempCount = 0;
-
-    notifications.forEach((item: INotification) => {
-      if (!item.read) {
-        tempCount++;
-      }
-    });
-
-    setNotificationUnreadCount(tempCount);
-    setNotifications(notifications);
-  };
+  }, [user, handleReciveNotificationData]);
 
   // base on isOnHeaderDefault to choose what state choosing
   const isOpen = isOnFixedHeader

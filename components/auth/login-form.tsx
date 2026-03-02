@@ -43,7 +43,7 @@ export default function LoginForm({
       toast.success('Login successful');
     }
     setIsLoading(false);
-  }, [user]);
+  }, [user, closeAuthModal]);
 
   return (
     <>

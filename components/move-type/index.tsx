@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Movie from 'types/movie';
 import RegularMovieItem from '../commons/regular-movie-item';
 import { getMoviesByType } from 'app/actions';
@@ -13,15 +13,21 @@ export default function MovieTypePage({ slug }: { slug: string }) {
   const [inViewRef, inView] = useInView();
   const [page, setPage] = useState<number>(1);
 
-  const getMovies = async () => {
-    const data = await getMoviesByType(slug, page);
-    setMovies((prev) => [...prev, ...data]);
-    isLoading && setIsLoading(false);
-  };
+  const getMovies = useCallback(
+    async (targetPage: number) => {
+      const data = await getMoviesByType(slug, targetPage);
+      setMovies((prev) => (targetPage === 1 ? data : [...prev, ...data]));
+      setIsLoading(false);
+    },
+    [slug]
+  );
 
   useEffect(() => {
-    getMovies();
-  }, []);
+    setMovies([]);
+    setPage(1);
+    setIsLoading(true);
+    void getMovies(1);
+  }, [getMovies]);
 
   useEffect(() => {
     if (inView) {
@@ -30,8 +36,10 @@ export default function MovieTypePage({ slug }: { slug: string }) {
   }, [inView]);
 
   useEffect(() => {
-    if (page > 1) getMovies();
-  }, [page]);
+    if (page > 1) {
+      void getMovies(page);
+    }
+  }, [page, getMovies]);
 
   if (isLoading) return <LoadingComponent />;
 

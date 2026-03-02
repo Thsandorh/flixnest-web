@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useDispatch } from 'react-redux';
@@ -117,13 +118,23 @@ export default function PersonalInfo({ user }: PersonalInfoProps) {
           <div className="relative">
             <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center overflow-hidden">
               {avatarPreview ? (
-                <img
+                <Image
                   src={avatarPreview}
                   alt="Avatar Preview"
+                  width={80}
+                  height={80}
+                  unoptimized
                   className="w-full h-full object-cover"
                 />
               ) : user.photo ? (
-                <img src={user.photo} alt="Avatar" className="w-full h-full object-cover" />
+                <Image
+                  src={user.photo}
+                  alt="Avatar"
+                  width={80}
+                  height={80}
+                  unoptimized
+                  className="w-full h-full object-cover"
+                />
               ) : (
                 <span className="text-white font-semibold text-2xl">
                   {user.name?.charAt(0)?.toUpperCase() ||

@@ -33,6 +33,20 @@ const extraImageHosts = [
 const nextConfig = {
   reactStrictMode: false,
   basePath,
+  async redirects() {
+    return [
+      {
+        source: '/nest',
+        destination: '/',
+        permanent: true,
+      },
+      {
+        source: '/nest/:path*',
+        destination: '/',
+        permanent: true,
+      },
+    ];
+  },
   webpack: (config) => {
     config.resolve.alias = {
       ...config.resolve.alias,
