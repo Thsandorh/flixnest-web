@@ -21,7 +21,7 @@ export default function CatalogSections() {
                 <Link
                   key={item.href}
                   href={item.href}
-                  className="rounded-lg border border-gray-800 bg-gradient-to-b from-gray-900 to-black p-3 hover:border-custome-red transition-colors"
+                  className="tv-card rounded-[1.2rem] border border-gray-800 bg-gradient-to-b from-gray-900 to-black p-4 hover:border-custome-red transition-colors"
                 >
                   <p className="text-sm font-medium leading-snug min-h-[2.5rem]">{item.name}</p>
                   <span

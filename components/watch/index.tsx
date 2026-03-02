@@ -454,16 +454,18 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
           <h1 className="text-lg lg:text-xl">Episode list</h1>
           <ul className="flex flex-wrap gap-2 lg:gap-3 mt-4">
             {movie.episodes[0].server_data.map((ep, index) => (
-              <li
-                key={index}
-                className={`block ${
-                  episodeIndex === index
-                    ? 'text-white bg-[#5E5E5E]'
-                    : 'bg-white text-black hover:bg-[#d3d3d3]'
-                } px-2 lg:px-3 py-1.5 lg:py-2 rounded-md font-semibold cursor-pointer text-sm lg:text-base`}
-                onClick={() => handleSwitchEpisode(index)}
-              >
-                {`Episode ${index + 1}`}
+              <li key={index}>
+                <button
+                  type="button"
+                  className={`tv-action block ${
+                    episodeIndex === index
+                      ? 'border-white/10 bg-[#5E5E5E] text-white'
+                      : 'border-white/10 bg-white text-black hover:bg-[#d3d3d3]'
+                  } px-2 lg:px-3 py-1.5 lg:py-2 rounded-md font-semibold text-sm lg:text-base`}
+                  onClick={() => handleSwitchEpisode(index)}
+                >
+                  {`Episode ${index + 1}`}
+                </button>
               </li>
             ))}
           </ul>

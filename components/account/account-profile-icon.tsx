@@ -21,14 +21,20 @@ export default function AccountProfileIcon({
   return (
     <div className="relative h-full flex items-center">
       <div className="relative group">
-        <Image
-          src={authenticatedUser.photo || AccountDefaultImg}
-          alt="User Profile"
-          className="cursor-pointer hover:ring-2 hover:ring-custome-red/50 transition-all duration-200 rounded-full border-2 border-transparent hover:border-custome-red/30"
-          width={32}
-          height={32}
+        <button
+          type="button"
+          className="tv-icon-button rounded-full"
           onClick={() => toogleSetAccountDropdownState(isOnFixedHeader)}
-        />
+          aria-label="Open account menu"
+        >
+          <Image
+            src={authenticatedUser.photo || AccountDefaultImg}
+            alt="User Profile"
+            className="hover:ring-2 hover:ring-custome-red/50 transition-all duration-200 rounded-full border-2 border-transparent hover:border-custome-red/30"
+            width={32}
+            height={32}
+          />
+        </button>
         {/* Online indicator */}
         <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-green-500 border-2 border-black rounded-full"></div>
       </div>

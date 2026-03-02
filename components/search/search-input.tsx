@@ -29,7 +29,7 @@ export default function SearchInput() {
   return (
     <input
       type="text"
-      className="w-full h-full text-black px-3 text-base lg:text-lg rounded-lg border border-gray-300 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+      className="tv-input w-full h-full rounded-2xl border border-white/10 bg-white px-4 text-base text-black shadow-[0_16px_44px_rgba(0,0,0,0.14)] lg:text-lg"
       placeholder="Enter movie name..."
       onChange={(e) => setInputValue(e.target.value)}
       defaultValue={searchParams.get('name')?.toString()}

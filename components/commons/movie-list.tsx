@@ -66,23 +66,47 @@ export default function MovieList({ listName, movies, isNewlyMovieItem }: MovieL
               </SwiperSlide>
             ))}
         {/* Desktop Navigation */}
-        <div className="absolute hidden lg:flex items-center top-0 left-0 bottom-0 w-[15%] bg-gradient-to-r from-black z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-          <GrPrevious size={30} className="cursor-pointer text-white" onClick={handlePrevSlide} />
+        <div className="absolute hidden lg:flex items-center top-0 left-0 bottom-0 w-[15%] bg-gradient-to-r from-black/80 to-transparent z-10 transition-opacity duration-300">
+          <button
+            type="button"
+            className="tv-icon-button ml-2 inline-flex h-14 w-14 items-center justify-center rounded-full border border-white/15 bg-black/60 text-white"
+            onClick={handlePrevSlide}
+            aria-label={`Previous items in ${listName}`}
+          >
+            <GrPrevious size={22} />
+          </button>
         </div>
-        <div className="absolute hidden lg:flex items-center justify-end top-0 right-0 bottom-0 w-[15%] bg-gradient-to-l from-black z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-          <GrNext size={30} className="cursor-pointer text-white" onClick={handleNextSlide} />
+        <div className="absolute hidden lg:flex items-center justify-end top-0 right-0 bottom-0 w-[15%] bg-gradient-to-l from-black/80 to-transparent z-10 transition-opacity duration-300">
+          <button
+            type="button"
+            className="tv-icon-button mr-2 inline-flex h-14 w-14 items-center justify-center rounded-full border border-white/15 bg-black/60 text-white"
+            onClick={handleNextSlide}
+            aria-label={`Next items in ${listName}`}
+          >
+            <GrNext size={22} />
+          </button>
         </div>
 
         {/* Mobile Navigation */}
-        <div className="absolute flex lg:hidden items-center top-1/2 left-2 transform -translate-y-1/2 w-8 h-8 bg-black/50 rounded-full z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-          <GrPrevious
-            size={16}
-            className="cursor-pointer text-white mx-auto"
+        <div className="absolute flex lg:hidden items-center top-1/2 left-2 transform -translate-y-1/2 z-10 transition-opacity duration-300">
+          <button
+            type="button"
+            className="tv-icon-button inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-black/60 text-white"
             onClick={handlePrevSlide}
-          />
+            aria-label={`Previous items in ${listName}`}
+          >
+            <GrPrevious size={16} />
+          </button>
         </div>
-        <div className="absolute flex lg:hidden items-center justify-center top-1/2 right-2 transform -translate-y-1/2 w-8 h-8 bg-black/50 rounded-full z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-          <GrNext size={16} className="cursor-pointer text-white" onClick={handleNextSlide} />
+        <div className="absolute flex lg:hidden items-center justify-center top-1/2 right-2 transform -translate-y-1/2 z-10 transition-opacity duration-300">
+          <button
+            type="button"
+            className="tv-icon-button inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-black/60 text-white"
+            onClick={handleNextSlide}
+            aria-label={`Next items in ${listName}`}
+          >
+            <GrNext size={16} />
+          </button>
         </div>
       </Swiper>
     </div>

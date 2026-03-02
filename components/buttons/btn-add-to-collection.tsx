@@ -95,8 +95,8 @@ export default function BtnAddToCollection({ variant, detailMovie }: BtnAddToCol
     <button
       className={
         variant === 'primary'
-          ? 'flex items-center space-x-2 bg-[#717171] py-3 px-5 rounded-md text-white transition duration-200 ease-in-out hover:bg-[#5a5a5a]'
-          : 'flex items-center bg-white px-3 py-2 rounded-md gap-x-2 text-black font-semibold transition duration-200 ease-in-out hover:bg-gray-200'
+          ? 'tv-action flex items-center space-x-2 rounded-xl border border-white/10 bg-[#717171] px-5 py-3 text-white transition duration-200 ease-in-out hover:bg-[#5a5a5a]'
+          : 'tv-action flex items-center gap-x-2 rounded-xl border border-white/10 bg-white px-3 py-2 text-black font-semibold transition duration-200 ease-in-out hover:bg-gray-200'
       }
       onClick={toogleMovieToUserCollection}
       disabled={isHandling || isLoading}

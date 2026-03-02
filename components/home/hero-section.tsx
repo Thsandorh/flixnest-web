@@ -53,23 +53,27 @@ export default function HeroSection({ movies }: { movies: NewlyMovie[] }) {
         })}
       </Swiper>
       {/* Desktop Navigation Button */}
-      <div
-        className="hidden lg:block absolute z-10 top-[18rem] right-6 border border-white p-4 rounded-full group hover:border-black hover:bg-white cursor-pointer transition-all duration-300"
+      <button
+        type="button"
+        className="tv-icon-button hidden lg:inline-flex absolute z-10 top-[18rem] right-6 h-16 w-16 items-center justify-center rounded-full border border-white/20 bg-black/55 text-white transition-all duration-300"
         onClick={handleClickToNextSlide}
+        aria-label="Show next featured title"
       >
-        <FaChevronRight className="text-white group-hover:text-black transition-colors duration-300" />
-      </div>
+        <FaChevronRight className="text-white transition-colors duration-300" />
+      </button>
 
       {/* Mobile/Tablet Navigation Button */}
-      <div
-        className="lg:hidden absolute z-10 top-1/2 right-4 transform -translate-y-1/2 border border-white/80 p-3 rounded-full group hover:border-black hover:bg-white cursor-pointer transition-all duration-300"
+      <button
+        type="button"
+        className="tv-icon-button lg:hidden absolute z-10 top-1/2 right-4 transform -translate-y-1/2 inline-flex h-12 w-12 items-center justify-center rounded-full border border-white/20 bg-black/55 text-white transition-all duration-300"
         onClick={handleClickToNextSlide}
+        aria-label="Show next featured title"
       >
         <FaChevronRight
-          className="text-white group-hover:text-black transition-colors duration-300"
+          className="text-white"
           size={16}
         />
-      </div>
+      </button>
     </div>
   );
 }

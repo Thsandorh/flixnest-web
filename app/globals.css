@@ -6,11 +6,24 @@
   --foreground-rgb: 0, 0, 0;
   --background-start-rgb: 214, 219, 220;
   --background-end-rgb: 255, 255, 255;
+  --tv-focus-ring: rgba(248, 113, 113, 0.95);
+  --tv-focus-shadow: rgba(248, 113, 113, 0.32);
+  --tv-surface-border: rgba(255, 255, 255, 0.12);
+  --tv-surface-fill: rgba(255, 255, 255, 0.04);
 }
 
 html, body {
   height: 100%;
   margin: 0;
+  scroll-behavior: smooth;
+  background:
+    radial-gradient(circle at top, rgba(127, 29, 29, 0.22), transparent 28%),
+    linear-gradient(180deg, #09090b 0%, #050505 46%, #000000 100%);
+}
+
+body {
+  min-height: 100vh;
+  text-rendering: optimizeLegibility;
 }
 
 .container-wrapper {
@@ -56,4 +69,78 @@ html, body {
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
+}
+
+.tv-card,
+.tv-action,
+.tv-chip,
+.tv-nav-link,
+.tv-icon-button,
+.tv-input {
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    border-color 180ms ease,
+    background-color 180ms ease,
+    color 180ms ease,
+    opacity 180ms ease;
+}
+
+.tv-card {
+  border-radius: 1.1rem;
+}
+
+.tv-action,
+.tv-input,
+.tv-nav-link,
+.tv-icon-button {
+  min-height: 2.75rem;
+}
+
+a[href]:focus-visible,
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[tabindex]:focus-visible,
+[role='button']:focus-visible,
+.tv-card:focus-visible,
+.tv-action:focus-visible,
+.tv-chip:focus-visible,
+.tv-nav-link:focus-visible,
+.tv-icon-button:focus-visible,
+.tv-input:focus-visible,
+.swiper-slide a:focus-visible,
+.swiper-slide button:focus-visible {
+  outline: 0;
+  border-color: var(--tv-focus-ring);
+  box-shadow:
+    0 0 0 3px rgba(248, 113, 113, 0.2),
+    0 0 0 7px rgba(248, 113, 113, 0.08),
+    0 22px 44px -18px var(--tv-focus-shadow);
+  transform: translateY(-2px) scale(1.02);
+}
+
+.tv-card:focus-visible img,
+.tv-card:focus-visible video,
+.swiper-slide a:focus-visible img {
+  filter: saturate(1.06);
+}
+
+.tv-focus-zone:focus-within {
+  border-color: rgba(248, 113, 113, 0.5);
+}
+
+.tv-input::placeholder {
+  color: rgba(161, 161, 170, 0.9);
+}
+
+@media (min-width: 1024px) {
+  .tv-shell main {
+    padding-bottom: 8rem;
+  }
+
+  .tv-touch-target {
+    min-height: 3.25rem;
+  }
 }

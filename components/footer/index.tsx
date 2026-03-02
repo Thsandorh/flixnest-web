@@ -32,7 +32,7 @@ export default function Footer() {
       <div className="container mx-auto px-4 md:px-6 py-12">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-20">
           <div className="space-y-5">
-            <Link href="/" className="inline-block">
+            <Link href="/" className="tv-nav-link inline-block rounded-xl px-2 py-1">
               <h2 className="text-4xl font-bold text-red-600 tracking-tight">FLIXNEST</h2>
             </Link>
             <p className="text-sm text-gray-400 leading-relaxed">
@@ -45,7 +45,7 @@ export default function Footer() {
                 href="https://github.com"
                 target="_blank"
                 rel="noreferrer"
-                className="bg-gray-900 hover:bg-red-600 text-white p-2 rounded-full transition-colors duration-300"
+                className="tv-icon-button bg-gray-900 hover:bg-red-600 text-white p-2 rounded-full transition-colors duration-300"
                 aria-label="GitHub"
               >
                 <FaGithub size={24} />
@@ -60,7 +60,7 @@ export default function Footer() {
                 <li key={item.href}>
                   <Link
                     href={item.href}
-                    className="text-sm text-gray-400 hover:text-red-500 transition-colors duration-300 flex items-center group"
+                    className="tv-nav-link text-sm text-gray-400 hover:text-red-500 transition-colors duration-300 flex items-center group rounded-xl px-2 py-1"
                   >
                     <span className="w-1 h-1 bg-red-600 rounded-full mr-2 opacity-0 group-hover:opacity-100 transition-opacity"></span>
                     {item.label}
@@ -80,7 +80,7 @@ export default function Footer() {
                       <li key={item.href}>
                         <Link
                           href={item.href}
-                          className="text-sm text-gray-400 hover:text-red-500 transition-colors duration-300 flex items-center group"
+                          className="tv-nav-link text-sm text-gray-400 hover:text-red-500 transition-colors duration-300 flex items-center group rounded-xl px-2 py-1"
                         >
                           <span className="w-1 h-1 bg-red-600 rounded-full mr-2 opacity-0 group-hover:opacity-100 transition-opacity"></span>
                           {item.label}

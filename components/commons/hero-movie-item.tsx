@@ -53,7 +53,7 @@ export default function HeroMovieItem({ detailMovie }: { detailMovie: DetailMovi
         <div className="space-x-5 flex items-center">
           <Link
             href={`/movies/${detailMovie.movie.slug}`}
-            className="inline-block py-3 px-5 bg-white text-black rounded-md"
+            className="tv-action inline-block rounded-xl border border-white/10 bg-white px-5 py-3 text-black"
           >
             <div className="flex align-top space-x-2">
               <FaPlay size={18} />
@@ -99,7 +99,7 @@ export default function HeroMovieItem({ detailMovie }: { detailMovie: DetailMovi
           <div className="space-y-3">
             <Link
               href={`/movies/${detailMovie.movie.slug}`}
-              className="block w-full bg-white text-black rounded-lg py-3 px-4 text-center font-semibold"
+              className="tv-action block w-full rounded-xl border border-white/10 bg-white px-4 py-3 text-center font-semibold text-black"
             >
               <div className="flex items-center justify-center gap-x-2">
                 <FaPlay size={16} />

@@ -32,14 +32,18 @@ export default function HeaderDefault({
 
   return (
     <header className="absolute top-0 left-0 right-0 z-20">
-      <div className="header-container flex items-center justify-between container-wrapper">
-        <Link className="block text-2xl font-extrabold tracking-tight text-custome-red" href="/">
+      <div className="header-container flex items-center justify-between container-wrapper gap-6 py-4">
+        <Link
+          className="tv-nav-link block rounded-full px-4 py-2 text-2xl font-extrabold tracking-tight text-custome-red"
+          href="/"
+          data-tv-autofocus="true"
+        >
           FLIXNEST
         </Link>
-        <ul className="flex flex-grow justify-center items-center font-semibold text-lg">
-          <li className="px-8">
+        <ul className="flex flex-grow justify-center items-center gap-2 font-semibold text-lg">
+          <li>
             <Link
-              className={`hover:text-custome-red ${
+              className={`tv-nav-link rounded-full px-5 py-3 hover:text-custome-red ${
                 pathname === '/movies/format/phim-le' && 'text-custome-red'
               }`}
               href="/movies/format/phim-le"
@@ -47,9 +51,9 @@ export default function HeaderDefault({
               Movies
             </Link>
           </li>
-          <li className="px-8">
+          <li>
             <Link
-              className={`hover:text-custome-red ${
+              className={`tv-nav-link rounded-full px-5 py-3 hover:text-custome-red ${
                 pathname === '/movies/format/phim-bo' && 'text-custome-red'
               }`}
               href="/movies/format/phim-bo"
@@ -57,9 +61,9 @@ export default function HeaderDefault({
               Series
             </Link>
           </li>
-          <li className="px-8">
+          <li>
             <Link
-              className={`hover:text-custome-red ${
+              className={`tv-nav-link rounded-full px-5 py-3 hover:text-custome-red ${
                 pathname === '/movies/format/hoat-hinh' && 'text-custome-red'
               }`}
               href="/movies/format/hoat-hinh"
@@ -67,9 +71,9 @@ export default function HeaderDefault({
               Animation
             </Link>
           </li>
-          <li className="px-8">
+          <li>
             <Link
-              className={`hover:text-custome-red ${
+              className={`tv-nav-link rounded-full px-5 py-3 hover:text-custome-red ${
                 pathname === '/movies/format/tv-shows' && 'text-custome-red'
               }`}
               href="/movies/format/tv-shows"
@@ -77,17 +81,27 @@ export default function HeaderDefault({
               TV show
             </Link>
           </li>
-          <li className={`px-8 relative ${!isShowFixedHeader && 'group'}`}>
-            <p className="leading-[3.62rem] hover:text-custome-red cursor-pointer">Genres</p>
+          <li className={`relative group ${!isShowFixedHeader && 'group'}`}>
+            <button
+              type="button"
+              className="tv-nav-link rounded-full px-5 py-3 hover:text-custome-red"
+            >
+              Genres
+            </button>
             <SubType />
           </li>
-          <li className={`px-8 relative ${!isShowFixedHeader && 'group'}`}>
-            <p className="leading-[3.62rem] hover:text-custome-red cursor-pointer">Countries</p>
+          <li className={`relative group ${!isShowFixedHeader && 'group'}`}>
+            <button
+              type="button"
+              className="tv-nav-link rounded-full px-5 py-3 hover:text-custome-red"
+            >
+              Countries
+            </button>
             <SubCountries />
           </li>
         </ul>
-        <div className="flex w-32 gap-x-4 items-center justify-around h-[3.62rem]">
-          <Link className="cursor-pointer hover:text-custome-red" href="/search">
+        <div className="flex w-36 gap-x-3 items-center justify-end h-[3.62rem]">
+          <Link className="tv-icon-button inline-flex items-center justify-center rounded-full px-3 hover:text-custome-red" href="/search">
             <IoSearch size={25} />
           </Link>
           {!loading &&

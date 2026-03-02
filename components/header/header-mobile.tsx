@@ -67,20 +67,20 @@ export default function HeaderMobile({
           {/* Hamburger Menu Icon */}
           <button
             onClick={toggleMobileMenu}
-            className="text-white hover:text-custome-red transition-colors"
+            className="tv-icon-button text-white hover:text-custome-red transition-colors rounded-full p-2"
             aria-label="Toggle mobile menu"
           >
             {isMobileMenuOpen ? <IoClose size={24} /> : <IoMenu size={24} />}
           </button>
 
           {/* Logo */}
-          <Link className="block" href="/" onClick={closeMobileMenu}>
+          <Link className="tv-nav-link block rounded-full px-3 py-2" href="/" onClick={closeMobileMenu}>
             <span className="text-xl font-extrabold tracking-tight text-custome-red">FLIXNEST</span>
           </Link>
 
           {/* Search Icon */}
           <Link
-            className="text-white hover:text-custome-red transition-colors"
+            className="tv-icon-button text-white hover:text-custome-red transition-colors rounded-full p-2"
             href="/search"
             aria-label="Search movies"
           >
@@ -99,10 +99,10 @@ export default function HeaderMobile({
             {/* Menu Header */}
             <div className="flex items-center justify-between p-4 border-b border-gray-800">
               <span className="text-lg font-extrabold tracking-tight text-custome-red">FLIXNEST</span>
-              <button
-                onClick={closeMobileMenu}
-                className="text-white hover:text-custome-red transition-colors"
-              >
+                <button
+                  onClick={closeMobileMenu}
+                  className="tv-icon-button text-white hover:text-custome-red transition-colors rounded-full p-2"
+                >
                 <IoClose size={24} />
               </button>
             </div>
@@ -119,7 +119,7 @@ export default function HeaderMobile({
                           pathname === '/movies/format/phim-le'
                             ? 'text-custome-red'
                             : 'text-white hover:text-custome-red'
-                        }`}
+                        } tv-nav-link rounded-xl px-3 py-2`}
                         href="/movies/format/phim-le"
                         onClick={closeMobileMenu}
                       >
@@ -132,7 +132,7 @@ export default function HeaderMobile({
                           pathname === '/movies/format/phim-bo'
                             ? 'text-custome-red'
                             : 'text-white hover:text-custome-red'
-                        }`}
+                        } tv-nav-link rounded-xl px-3 py-2`}
                         href="/movies/format/phim-bo"
                         onClick={closeMobileMenu}
                       >
@@ -145,7 +145,7 @@ export default function HeaderMobile({
                           pathname === '/movies/format/hoat-hinh'
                             ? 'text-custome-red'
                             : 'text-white hover:text-custome-red'
-                        }`}
+                        } tv-nav-link rounded-xl px-3 py-2`}
                         href="/movies/format/hoat-hinh"
                         onClick={closeMobileMenu}
                       >
@@ -158,7 +158,7 @@ export default function HeaderMobile({
                           pathname === '/movies/format/tv-shows'
                             ? 'text-custome-red'
                             : 'text-white hover:text-custome-red'
-                        }`}
+                        } tv-nav-link rounded-xl px-3 py-2`}
                         href="/movies/format/tv-shows"
                         onClick={closeMobileMenu}
                       >
@@ -167,7 +167,7 @@ export default function HeaderMobile({
                     </li>
                     <li>
                       <button
-                        className="flex items-center justify-between w-full py-2 text-lg font-medium text-white hover:text-custome-red transition-colors"
+                        className="tv-nav-link flex items-center justify-between w-full rounded-xl px-3 py-2 text-lg font-medium text-white hover:text-custome-red transition-colors"
                         onClick={toggleTypeSubmenu}
                       >
                         Genres
@@ -190,7 +190,7 @@ export default function HeaderMobile({
                                         pathname === `/movies/type/${item.slug}`
                                           ? 'text-custome-red'
                                           : 'text-gray-300 hover:text-custome-red'
-                                      }`}
+                                      } tv-nav-link rounded-lg px-2 py-1`}
                                       href={`/movies/type/${item.slug}`}
                                       onClick={closeMobileMenu}
                                     >
@@ -206,7 +206,7 @@ export default function HeaderMobile({
                     </li>
                     <li>
                       <button
-                        className="flex items-center justify-between w-full py-2 text-lg font-medium text-white hover:text-custome-red transition-colors"
+                        className="tv-nav-link flex items-center justify-between w-full rounded-xl px-3 py-2 text-lg font-medium text-white hover:text-custome-red transition-colors"
                         onClick={toggleCountrySubmenu}
                       >
                         Countries
@@ -225,7 +225,7 @@ export default function HeaderMobile({
                                   pathname === `/movies/country/${item.slug}`
                                     ? 'text-custome-red'
                                     : 'text-gray-300 hover:text-custome-red'
-                                }`}
+                                } tv-nav-link rounded-lg px-2 py-1`}
                                 href={`/movies/country/${item.slug}`}
                                 onClick={closeMobileMenu}
                               >

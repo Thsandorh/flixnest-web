@@ -43,8 +43,9 @@ export default function NotificationIcon({
     }
   };
   return (
-    <div
-      className="relative cursor-pointer hover:bg-gray-800/50 rounded-full p-2 transition-all duration-200 group"
+    <button
+      type="button"
+      className="tv-icon-button relative rounded-full p-2 text-white hover:bg-gray-800/50 transition-all duration-200 group"
       onClick={toogleSetNotificationDropdownState}
       aria-label="Notifications"
     >
@@ -53,6 +54,6 @@ export default function NotificationIcon({
         size={24}
         className="text-white group-hover:text-custome-red transition-colors"
       />
-    </div>
+    </button>
   );
 }
