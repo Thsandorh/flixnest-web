@@ -337,8 +337,56 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
         />
       ) : isResolvingStream ? (
         <div className="container-wrapper-movie px-4 lg:px-0">
-          <div className="w-full rounded-md border border-zinc-700 bg-zinc-900/70 p-6 text-center text-sm lg:text-base text-zinc-200">
-            Resolving stream...
+          <div className="relative overflow-hidden rounded-[1.75rem] border border-white/10 bg-[radial-gradient(circle_at_top_left,_rgba(56,189,248,0.18),_transparent_28%),linear-gradient(135deg,_rgba(24,24,27,0.96),_rgba(9,9,11,0.98))] p-6 lg:p-8">
+            <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(115deg,transparent,rgba(255,255,255,0.05),transparent)] opacity-70" />
+            <div className="relative flex flex-col gap-8 lg:flex-row lg:items-center lg:justify-between">
+              <div className="max-w-2xl space-y-4">
+                <div className="inline-flex items-center gap-3 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] uppercase tracking-[0.32em] text-zinc-300 backdrop-blur">
+                  <span className="relative flex h-2.5 w-2.5">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-sky-300/80" />
+                    <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-sky-200 shadow-[0_0_16px_rgba(125,211,252,0.9)]" />
+                  </span>
+                  Preparing Playback
+                </div>
+                <div className="space-y-2">
+                  <h2 className="text-2xl font-semibold tracking-tight text-white lg:text-4xl">
+                    Finding a clean stream for {movie.movie.name}
+                  </h2>
+                  <p className="max-w-xl text-sm leading-6 text-zinc-300 lg:text-base">
+                    We are checking the available direct sources and locking onto the first stable
+                    option.
+                  </p>
+                </div>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-3 lg:min-w-[22rem]">
+                <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 backdrop-blur">
+                  <div className="h-2 w-14 rounded-full bg-zinc-700/80" />
+                  <div className="mt-4 h-3 w-24 animate-pulse rounded-full bg-white/15" />
+                  <div className="mt-2 h-9 rounded-2xl bg-[linear-gradient(90deg,rgba(255,255,255,0.05),rgba(125,211,252,0.24),rgba(255,255,255,0.05))] bg-[length:200%_100%] animate-pulse" />
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 backdrop-blur">
+                  <div className="h-2 w-16 rounded-full bg-zinc-700/80" />
+                  <div className="mt-4 h-3 w-20 animate-pulse rounded-full bg-white/15 [animation-delay:120ms]" />
+                  <div className="mt-2 h-9 rounded-2xl bg-[linear-gradient(90deg,rgba(255,255,255,0.05),rgba(244,114,182,0.22),rgba(255,255,255,0.05))] bg-[length:200%_100%] animate-pulse [animation-delay:120ms]" />
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 backdrop-blur">
+                  <div className="h-2 w-12 rounded-full bg-zinc-700/80" />
+                  <div className="mt-4 h-3 w-28 animate-pulse rounded-full bg-white/15 [animation-delay:240ms]" />
+                  <div className="mt-2 h-9 rounded-2xl bg-[linear-gradient(90deg,rgba(255,255,255,0.05),rgba(74,222,128,0.2),rgba(255,255,255,0.05))] bg-[length:200%_100%] animate-pulse [animation-delay:240ms]" />
+                </div>
+              </div>
+            </div>
+            <div className="relative mt-6 flex flex-wrap gap-2 text-xs text-zinc-400 lg:text-sm">
+              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
+                Direct source matching
+              </span>
+              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
+                Adaptive stream check
+              </span>
+              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
+                Zero proxy playback
+              </span>
+            </div>
           </div>
         </div>
       ) : (
