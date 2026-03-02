@@ -15,8 +15,8 @@ const ensureProductionBuild = () => {
 
   console.log(`Missing Next production build at ${buildIdPath}. Running next build...`);
 
-  const nextCliPath = require.resolve('next/dist/bin/next');
-  const buildResult = spawnSync(process.execPath, [nextCliPath, 'build'], {
+  const buildScriptPath = path.join(appDir, 'scripts', 'run-next-build.js');
+  const buildResult = spawnSync(process.execPath, [buildScriptPath], {
     cwd: appDir,
     stdio: 'inherit',
     env: process.env,
