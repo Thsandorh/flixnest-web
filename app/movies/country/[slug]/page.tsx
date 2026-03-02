@@ -1,4 +1,4 @@
-import MovieCountryPage from '@/components/movie-country';
+import MovieCountryPage from '../../../../components/movie-country';
 import PageParams from 'types/page-params';
 import countries from 'data/countries';
 

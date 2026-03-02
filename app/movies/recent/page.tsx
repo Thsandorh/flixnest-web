@@ -1,4 +1,4 @@
-import RecentMoviePage from "@/components/recent";
+import RecentMoviePage from '../../../components/recent';
 import { Metadata } from 'next';
 
 export const metadata: Metadata = {

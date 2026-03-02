@@ -1,4 +1,4 @@
-import MovieFormatPage from '@/components/movie-format';
+import MovieFormatPage from '../../../../components/movie-format';
 import PageParams from 'types/page-params';
 import movieFormat from 'data/move-format';
 

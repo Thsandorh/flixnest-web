@@ -1,4 +1,4 @@
-import MoviePage from '@/components/movie';
+import MoviePage from '../../../components/movie';
 import MovieServices from 'services/movie-services';
 import { redirect } from 'next/navigation';
 import TMDBServices from 'services/tmdb-services';

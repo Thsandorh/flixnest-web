@@ -1,4 +1,4 @@
-import SearchMoviePage from "@/components/search";
+import SearchMoviePage from '../../components/search';
 
 import { Metadata } from 'next';
 

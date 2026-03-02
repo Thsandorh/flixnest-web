@@ -1,4 +1,4 @@
-import MovieTypePage from '@/components/move-type';
+import MovieTypePage from '../../../../components/move-type';
 import PageParams from 'types/page-params';
 import movieType from 'data/movie-type';
 

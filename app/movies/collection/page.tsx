@@ -1,5 +1,5 @@
 import { Metadata } from 'next';
-import MovieCollectionPage from '@/components/collection';
+import MovieCollectionPage from '../../../components/collection';
 
 export const metadata: Metadata = {
   title:

@@ -1,4 +1,4 @@
-import MovieWatchPage from '@/components/watch';
+import MovieWatchPage from '../../../../components/watch';
 import MovieServices from 'services/movie-services';
 import DetailMovie from 'types/detail-movie';
 import { Metadata } from 'next';

@@ -1,3 +1,9 @@
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 const extraImageHosts = [
   process.env.NEXT_PUBLIC_IMG_DOMAIN,
   process.env.NEXT_PUBLIC_TMDB_IMG_DOMAIN,
@@ -14,6 +20,19 @@ const extraImageHosts = [
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: false,
+  webpack: (config) => {
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      '@': __dirname,
+      data: path.join(__dirname, 'data'),
+      lib: path.join(__dirname, 'lib'),
+      services: path.join(__dirname, 'services'),
+      types: path.join(__dirname, 'types'),
+      utils: path.join(__dirname, 'utils'),
+    };
+
+    return config;
+  },
   images: {
     domains: Array.from(
       new Set([
