@@ -1,11 +1,13 @@
 const http = require('http');
+const path = require('path');
 const next = require('next');
 
 const port = parseInt(process.env.PORT || '3000', 10);
 const host = process.env.HOST || '0.0.0.0';
 const dev = process.env.NODE_ENV !== 'production';
+const appDir = path.resolve(__dirname);
 
-const app = next({ dev, hostname: host, port });
+const app = next({ dev, dir: appDir, hostname: host, port });
 const handle = app.getRequestHandler();
 
 app
