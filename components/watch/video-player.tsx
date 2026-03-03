@@ -8,7 +8,7 @@ type VideoPlayerProps = {
   videoUrl: string;
   thumbnail: string;
   videoProgress: number | null;
-  onPlaybackError?: () => void;
+  onPlaybackError?: () => boolean | void;
 };
 
 const VideoPlayer = forwardRef<HTMLVideoElement, VideoPlayerProps>(
@@ -16,6 +16,7 @@ const VideoPlayer = forwardRef<HTMLVideoElement, VideoPlayerProps>(
     const overlay = useRef<HTMLDivElement | null>(null);
     const hlsRef = useRef<Hls | null>(null);
     const [isCanPlay, setIsCanPlay] = useState<boolean>(false);
+    const [hasPlaybackError, setHasPlaybackError] = useState<boolean>(false);
     const resolvedVideoRef = videoRef && 'current' in videoRef ? videoRef : null;
 
     const hideOverlay = useCallback(() => {
@@ -25,6 +26,15 @@ const VideoPlayer = forwardRef<HTMLVideoElement, VideoPlayerProps>(
     const revealOverlay = useCallback(() => {
       overlay.current?.classList.remove('hidden');
     }, []);
+
+    const handlePlaybackError = useCallback(() => {
+      const recovered = onPlaybackError?.();
+      if (recovered === false || recovered === undefined) {
+        setHasPlaybackError(true);
+        setIsCanPlay(true);
+        revealOverlay();
+      }
+    }, [onPlaybackError, revealOverlay]);
 
     const attemptPlay = useCallback((video: HTMLVideoElement | null) => {
       if (!video) return;
@@ -39,6 +49,7 @@ const VideoPlayer = forwardRef<HTMLVideoElement, VideoPlayerProps>(
     const handleReady = useCallback(
       (video: HTMLVideoElement | null) => {
         setIsCanPlay(true);
+        setHasPlaybackError(false);
         if (video && videoProgress) {
           attemptPlay(video);
           hideOverlay();
@@ -52,6 +63,7 @@ const VideoPlayer = forwardRef<HTMLVideoElement, VideoPlayerProps>(
 
       const video = resolvedVideoRef?.current ?? null;
       setIsCanPlay(false);
+      setHasPlaybackError(false);
 
       if (video) {
         let sourceAttached = false;
@@ -65,17 +77,16 @@ const VideoPlayer = forwardRef<HTMLVideoElement, VideoPlayerProps>(
 
           hls.on(Hls.Events.ERROR, (_event, data) => {
             if (data?.fatal) {
-              onPlaybackError?.();
+              handlePlaybackError();
             }
           });
         } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-          // Safari and some mobile WebViews can play HLS natively.
           video.src = videoUrl;
           sourceAttached = true;
         }
 
         if (!sourceAttached) {
-          onPlaybackError?.();
+          handlePlaybackError();
         }
 
         if (videoProgress) {
@@ -94,7 +105,7 @@ const VideoPlayer = forwardRef<HTMLVideoElement, VideoPlayerProps>(
 
         revealOverlay();
       };
-    }, [onPlaybackError, revealOverlay, videoUrl, videoProgress, resolvedVideoRef]);
+    }, [handlePlaybackError, revealOverlay, videoUrl, videoProgress, resolvedVideoRef]);
 
     const handlePlayVideo = () => {
       attemptPlay(resolvedVideoRef?.current ?? null);
@@ -107,7 +118,7 @@ const VideoPlayer = forwardRef<HTMLVideoElement, VideoPlayerProps>(
 
       const onReady = () => handleReady(video);
       const onPlaying = hideOverlay;
-      const onError = () => onPlaybackError?.();
+      const onError = () => handlePlaybackError();
 
       video.addEventListener('canplay', onReady);
       video.addEventListener('canplaythrough', onReady);
@@ -122,7 +133,7 @@ const VideoPlayer = forwardRef<HTMLVideoElement, VideoPlayerProps>(
         video.removeEventListener('playing', onPlaying);
         video.removeEventListener('error', onError);
       };
-    }, [handleReady, hideOverlay, onPlaybackError, resolvedVideoRef]);
+    }, [handlePlaybackError, handleReady, hideOverlay, resolvedVideoRef]);
 
     return (
       <div className="relative w-full h-[34rem]">
@@ -136,7 +147,11 @@ const VideoPlayer = forwardRef<HTMLVideoElement, VideoPlayerProps>(
         />
         <div ref={overlay} className="absolute inset-0 bg-black flex items-center justify-center">
           <Image src={thumbnail} alt="" fill className="object-center object-cover" unoptimized />
-          {isCanPlay ? (
+          {hasPlaybackError ? (
+            <div className="absolute z-10 px-4 text-center text-white text-sm lg:text-base max-w-md">
+              This stream could not be played on this device. Try another server.
+            </div>
+          ) : isCanPlay ? (
             <FaPlay
               className="absolute cursor-pointer z-10 hover:scale-125 transition-all duration-200"
               size={40}

@@ -110,6 +110,7 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
   const [activeStreamIndex, setActiveStreamIndex] = useState(0);
   const [isResolvingStream, setIsResolvingStream] = useState<boolean>(true);
   const [activePlaybackSource, setActivePlaybackSource] = useState<ActivePlaybackSource>('native');
+  const [isPlaybackBlocked, setIsPlaybackBlocked] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRequestTokenRef = useRef(0);
@@ -213,6 +214,7 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
     async (targetServerIndex: number, targetEpisodeIndex: number) => {
       const token = ++streamRequestTokenRef.current;
       setIsResolvingStream(true);
+      setIsPlaybackBlocked(false);
       setStreamCandidates([]);
       setActiveStreamIndex(0);
       const nativeLink = resolveEpisodeLink(targetServerIndex, targetEpisodeIndex);
@@ -267,6 +269,7 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
     if (!selectedCandidate) return;
 
     setVideoProgress(null);
+    setIsPlaybackBlocked(false);
     setActiveStreamIndex(index);
     setActivePlaybackSource('addon');
     setEpisodeLink(selectedCandidate.url);
@@ -428,11 +431,17 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
   const handlePlaybackError = () => {
     const nextIndex = activeStreamIndex + 1;
     const nextCandidate = streamCandidates[nextIndex];
-    if (!nextCandidate) return;
 
-    setActiveStreamIndex(nextIndex);
-    setActivePlaybackSource('addon');
-    setEpisodeLink(nextCandidate.url);
+    if (nextCandidate) {
+      setIsPlaybackBlocked(false);
+      setActiveStreamIndex(nextIndex);
+      setActivePlaybackSource('addon');
+      setEpisodeLink(nextCandidate.url);
+      return true;
+    }
+
+    setIsPlaybackBlocked(true);
+    return false;
   };
 
   const hasMultipleServers = movie.episodes.length + streamCandidates.length > 1;
@@ -446,7 +455,7 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
         handleRejectProgressWatch={handleRejectProgressWatch}
         movie={movie}
       />
-      {hasEpisodeSource ? (
+      {hasEpisodeSource && !isPlaybackBlocked ? (
         <VideoPlayer
           ref={videoRef}
           videoUrl={episodeLink}
@@ -505,6 +514,15 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
               <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
                 Zero proxy playback
               </span>
+            </div>
+          </div>
+        </div>
+      ) : isPlaybackBlocked ? (
+        <div className="container-wrapper-movie px-4 lg:px-0">
+          <div className="w-full rounded-md border border-red-400/30 bg-zinc-900/80 p-6 text-center text-sm lg:text-base text-zinc-100 space-y-3">
+            <div>Playback failed on this source in your device WebView.</div>
+            <div className="text-zinc-300 text-xs lg:text-sm">
+              Try another server below. If all sources fail in APK, open this title in browser.
             </div>
           </div>
         </div>
