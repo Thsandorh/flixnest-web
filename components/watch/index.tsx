@@ -24,6 +24,16 @@ type ActivePlaybackSource = 'native' | 'addon';
 
 type ProxyHeaders = Partial<Record<'referer' | 'origin' | 'user-agent', string>>;
 
+
+type GuestProgressState = {
+  id?: string;
+  progress?: {
+    episodeIndex?: number;
+    progressTime?: number;
+    episodeLink?: string;
+  };
+};
+
 const isPlaylistLikeUrl = (candidateUrl: string) => {
   const normalized = String(candidateUrl || '').trim().toLowerCase();
   if (!normalized) return false;
@@ -81,7 +91,7 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
   // server_data[episodeIndex] || server_data[index]: episode
 
   const user = useSelector((state: any) => state.auth.user);
-  const progress = useSelector((state: any) => state.progress.progress);
+  const progress = useSelector((state: any) => state.progress.progress as GuestProgressState | null);
   const dispatch = useDispatch();
   const initialGuestProgressRef = useRef(progress);
 
@@ -100,6 +110,7 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
   const [activeStreamIndex, setActiveStreamIndex] = useState(0);
   const [isResolvingStream, setIsResolvingStream] = useState<boolean>(true);
   const [activePlaybackSource, setActivePlaybackSource] = useState<ActivePlaybackSource>('native');
+  const [isPlaybackBlocked, setIsPlaybackBlocked] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRequestTokenRef = useRef(0);
@@ -107,6 +118,7 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
   const stremioType = movie.movie.tmdb?.type === 'tv' ? 'series' : 'movie';
   const stremioTmdbId = String(movie.movie.tmdb?.id || '').trim();
   const stremioSeason = Number(movie.movie.tmdb?.season || 1);
+  const guestProgressSnapshot = progress?.progress;
 
   const resolveEpisodeLink = useCallback(
     (targetServerIndex: number, targetEpisodeIndex: number) => {
@@ -202,6 +214,7 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
     async (targetServerIndex: number, targetEpisodeIndex: number) => {
       const token = ++streamRequestTokenRef.current;
       setIsResolvingStream(true);
+      setIsPlaybackBlocked(false);
       setStreamCandidates([]);
       setActiveStreamIndex(0);
       const nativeLink = resolveEpisodeLink(targetServerIndex, targetEpisodeIndex);
@@ -256,6 +269,7 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
     if (!selectedCandidate) return;
 
     setVideoProgress(null);
+    setIsPlaybackBlocked(false);
     setActiveStreamIndex(index);
     setActivePlaybackSource('addon');
     setEpisodeLink(selectedCandidate.url);
@@ -279,9 +293,9 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
       if (guestProgress?.id !== movie.movie._id) return;
 
       setPreviousWatchProgress({
-        progressEpIndex: guestProgress.progress.episodeIndex,
-        progressTime: guestProgress.progress.progressTime,
-        progressEpLink: guestProgress.progress.episodeLink,
+        progressEpIndex: guestProgress?.progress?.episodeIndex || 0,
+        progressTime: guestProgress?.progress?.progressTime || 0,
+        progressEpLink: guestProgress?.progress?.episodeLink || '',
       });
 
       setTimeout(() => setIsShowToastProgress(true), 2000);
@@ -375,9 +389,9 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
         origin_name: movie.movie.origin_name,
         lang: movie.movie.lang,
         quality: movie.movie.quality,
-        progressEpIndex: progress.progress.episodeIndex || 0,
-        progressTime: progress.progress.progressTime || 0,
-        progressEpLink: progress.progress.episodeLink || resolveDefaultEpisodeLink(),
+        progressEpIndex: guestProgressSnapshot?.episodeIndex || 0,
+        progressTime: guestProgressSnapshot?.progressTime || 0,
+        progressEpLink: guestProgressSnapshot?.episodeLink || resolveDefaultEpisodeLink(),
       };
 
       await firebaseServices.storeRecentMovies(recentMovieData, user.id);
@@ -395,9 +409,9 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
     movie.movie.quality,
     movie.movie.slug,
     movie.movie.thumb_url,
-    progress.progress.episodeIndex,
-    progress.progress.episodeLink,
-    progress.progress.progressTime,
+    guestProgressSnapshot?.episodeIndex,
+    guestProgressSnapshot?.episodeLink,
+    guestProgressSnapshot?.progressTime,
     resolveDefaultEpisodeLink,
     user,
   ]);
@@ -417,11 +431,17 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
   const handlePlaybackError = () => {
     const nextIndex = activeStreamIndex + 1;
     const nextCandidate = streamCandidates[nextIndex];
-    if (!nextCandidate) return;
 
-    setActiveStreamIndex(nextIndex);
-    setActivePlaybackSource('addon');
-    setEpisodeLink(nextCandidate.url);
+    if (nextCandidate) {
+      setIsPlaybackBlocked(false);
+      setActiveStreamIndex(nextIndex);
+      setActivePlaybackSource('addon');
+      setEpisodeLink(nextCandidate.url);
+      return true;
+    }
+
+    setIsPlaybackBlocked(true);
+    return false;
   };
 
   const hasMultipleServers = movie.episodes.length + streamCandidates.length > 1;
@@ -435,7 +455,7 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
         handleRejectProgressWatch={handleRejectProgressWatch}
         movie={movie}
       />
-      {hasEpisodeSource ? (
+      {hasEpisodeSource && !isPlaybackBlocked ? (
         <VideoPlayer
           ref={videoRef}
           videoUrl={episodeLink}
@@ -494,6 +514,15 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
               <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
                 Zero proxy playback
               </span>
+            </div>
+          </div>
+        </div>
+      ) : isPlaybackBlocked ? (
+        <div className="container-wrapper-movie px-4 lg:px-0">
+          <div className="w-full rounded-md border border-red-400/30 bg-zinc-900/80 p-6 text-center text-sm lg:text-base text-zinc-100 space-y-3">
+            <div>Playback failed on this source in your device WebView.</div>
+            <div className="text-zinc-300 text-xs lg:text-sm">
+              Try another server below. If all sources fail in APK, open this title in browser.
             </div>
           </div>
         </div>
