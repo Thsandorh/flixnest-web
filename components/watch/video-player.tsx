@@ -18,35 +18,64 @@ const VideoPlayer = forwardRef<HTMLVideoElement, VideoPlayerProps>(
     const [isCanPlay, setIsCanPlay] = useState<boolean>(false);
     const resolvedVideoRef = videoRef && 'current' in videoRef ? videoRef : null;
 
-    const handleCanPlayThrough = useCallback((video: HTMLVideoElement | null) => {
-      setIsCanPlay(true);
-      if (video && videoProgress) {
-        video.play();
-        overlay.current?.classList.add('hidden');
+    const hideOverlay = useCallback(() => {
+      overlay.current?.classList.add('hidden');
+    }, []);
+
+    const revealOverlay = useCallback(() => {
+      overlay.current?.classList.remove('hidden');
+    }, []);
+
+    const attemptPlay = useCallback((video: HTMLVideoElement | null) => {
+      if (!video) return;
+      const playPromise = video.play();
+      if (playPromise && typeof playPromise.catch === 'function') {
+        playPromise.catch(() => {
+          // Ignore autoplay rejections on mobile; user interaction will start playback.
+        });
       }
-    }, [videoProgress]);
+    }, []);
+
+    const handleReady = useCallback(
+      (video: HTMLVideoElement | null) => {
+        setIsCanPlay(true);
+        if (video && videoProgress) {
+          attemptPlay(video);
+          hideOverlay();
+        }
+      },
+      [attemptPlay, hideOverlay, videoProgress]
+    );
 
     useEffect(() => {
       if (!videoUrl) return;
 
       const video = resolvedVideoRef?.current ?? null;
-      const currentOverlay = overlay.current;
       setIsCanPlay(false);
 
       if (video) {
+        let sourceAttached = false;
+
         if (Hls.isSupported()) {
           const hls = new Hls();
           hlsRef.current = hls;
           hls.loadSource(videoUrl);
           hls.attachMedia(video);
+          sourceAttached = true;
+
           hls.on(Hls.Events.ERROR, (_event, data) => {
             if (data?.fatal) {
               onPlaybackError?.();
             }
           });
         } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-          // For Safari and other browsers that support HLS natively
+          // Safari and some mobile WebViews can play HLS natively.
           video.src = videoUrl;
+          sourceAttached = true;
+        }
+
+        if (!sourceAttached) {
+          onPlaybackError?.();
         }
 
         if (videoProgress) {
@@ -59,37 +88,52 @@ const VideoPlayer = forwardRef<HTMLVideoElement, VideoPlayerProps>(
         hlsRef.current = null;
         if (video && video.src) {
           video.pause();
-          video.removeAttribute('src'); // Stop the video stream
+          video.removeAttribute('src');
           video.load();
         }
 
-        currentOverlay?.classList.remove('hidden');
+        revealOverlay();
       };
-    }, [onPlaybackError, videoUrl, videoProgress, resolvedVideoRef]);
+    }, [onPlaybackError, revealOverlay, videoUrl, videoProgress, resolvedVideoRef]);
 
     const handlePlayVideo = () => {
-      resolvedVideoRef?.current?.play();
-      overlay.current?.classList.add('hidden');
+      attemptPlay(resolvedVideoRef?.current ?? null);
+      hideOverlay();
     };
 
     useEffect(() => {
       const video = resolvedVideoRef?.current ?? null;
       if (!video) return;
 
-      const onCanPlayThrough = () => handleCanPlayThrough(video);
+      const onReady = () => handleReady(video);
+      const onPlaying = hideOverlay;
       const onError = () => onPlaybackError?.();
-      video.addEventListener('canplaythrough', onCanPlayThrough);
+
+      video.addEventListener('canplay', onReady);
+      video.addEventListener('canplaythrough', onReady);
+      video.addEventListener('loadeddata', onReady);
+      video.addEventListener('playing', onPlaying);
       video.addEventListener('error', onError);
 
       return () => {
-        video.removeEventListener('canplaythrough', onCanPlayThrough);
+        video.removeEventListener('canplay', onReady);
+        video.removeEventListener('canplaythrough', onReady);
+        video.removeEventListener('loadeddata', onReady);
+        video.removeEventListener('playing', onPlaying);
         video.removeEventListener('error', onError);
       };
-    }, [handleCanPlayThrough, onPlaybackError, resolvedVideoRef]);
+    }, [handleReady, hideOverlay, onPlaybackError, resolvedVideoRef]);
 
     return (
       <div className="relative w-full h-[34rem]">
-        <video ref={videoRef} controls style={{ width: '100%', height: '100%' }} />
+        <video
+          ref={videoRef}
+          controls
+          playsInline
+          preload="metadata"
+          poster={thumbnail}
+          style={{ width: '100%', height: '100%' }}
+        />
         <div ref={overlay} className="absolute inset-0 bg-black flex items-center justify-center">
           <Image src={thumbnail} alt="" fill className="object-center object-cover" unoptimized />
           {isCanPlay ? (
@@ -108,7 +152,6 @@ const VideoPlayer = forwardRef<HTMLVideoElement, VideoPlayerProps>(
   }
 );
 
-// Set a display name for the component
 VideoPlayer.displayName = 'VideoPlayer';
 
 export default VideoPlayer;

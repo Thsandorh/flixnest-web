@@ -7,12 +7,20 @@ on:
         description: Hosted FlixNest URL loaded inside the Capacitor shell
         required: false
         default: https://flixnest.app
+  release:
+    types: [published]
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
 
 jobs:
   build-apk:
     runs-on: ubuntu-latest
     env:
-      CAPACITOR_SERVER_URL: ${{ inputs.app_url }}
+      CAPACITOR_SERVER_URL: ${{ github.event.inputs.app_url || 'https://flixnest.app' }}
 
     steps:
       - name: Checkout
@@ -21,14 +29,14 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: '21'
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
@@ -60,3 +68,19 @@ jobs:
           name: flixnest-android-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+
+      - name: Create GitHub Release from tag
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+          generate_release_notes: true
+          files: android/app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Attach APK to published GitHub Release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.release.tag_name }}
+          files: android/app/build/outputs/apk/debug/app-debug.apk

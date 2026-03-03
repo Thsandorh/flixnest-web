@@ -24,6 +24,16 @@ type ActivePlaybackSource = 'native' | 'addon';
 
 type ProxyHeaders = Partial<Record<'referer' | 'origin' | 'user-agent', string>>;
 
+
+type GuestProgressState = {
+  id?: string;
+  progress?: {
+    episodeIndex?: number;
+    progressTime?: number;
+    episodeLink?: string;
+  };
+};
+
 const isPlaylistLikeUrl = (candidateUrl: string) => {
   const normalized = String(candidateUrl || '').trim().toLowerCase();
   if (!normalized) return false;
@@ -81,7 +91,7 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
   // server_data[episodeIndex] || server_data[index]: episode
 
   const user = useSelector((state: any) => state.auth.user);
-  const progress = useSelector((state: any) => state.progress.progress);
+  const progress = useSelector((state: any) => state.progress.progress as GuestProgressState | null);
   const dispatch = useDispatch();
   const initialGuestProgressRef = useRef(progress);
 
@@ -107,6 +117,7 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
   const stremioType = movie.movie.tmdb?.type === 'tv' ? 'series' : 'movie';
   const stremioTmdbId = String(movie.movie.tmdb?.id || '').trim();
   const stremioSeason = Number(movie.movie.tmdb?.season || 1);
+  const guestProgressSnapshot = progress?.progress;
 
   const resolveEpisodeLink = useCallback(
     (targetServerIndex: number, targetEpisodeIndex: number) => {
@@ -279,9 +290,9 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
       if (guestProgress?.id !== movie.movie._id) return;
 
       setPreviousWatchProgress({
-        progressEpIndex: guestProgress.progress.episodeIndex,
-        progressTime: guestProgress.progress.progressTime,
-        progressEpLink: guestProgress.progress.episodeLink,
+        progressEpIndex: guestProgress?.progress?.episodeIndex || 0,
+        progressTime: guestProgress?.progress?.progressTime || 0,
+        progressEpLink: guestProgress?.progress?.episodeLink || '',
       });
 
       setTimeout(() => setIsShowToastProgress(true), 2000);
@@ -375,9 +386,9 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
         origin_name: movie.movie.origin_name,
         lang: movie.movie.lang,
         quality: movie.movie.quality,
-        progressEpIndex: progress.progress.episodeIndex || 0,
-        progressTime: progress.progress.progressTime || 0,
-        progressEpLink: progress.progress.episodeLink || resolveDefaultEpisodeLink(),
+        progressEpIndex: guestProgressSnapshot?.episodeIndex || 0,
+        progressTime: guestProgressSnapshot?.progressTime || 0,
+        progressEpLink: guestProgressSnapshot?.episodeLink || resolveDefaultEpisodeLink(),
       };
 
       await firebaseServices.storeRecentMovies(recentMovieData, user.id);
@@ -395,9 +406,9 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
     movie.movie.quality,
     movie.movie.slug,
     movie.movie.thumb_url,
-    progress.progress.episodeIndex,
-    progress.progress.episodeLink,
-    progress.progress.progressTime,
+    guestProgressSnapshot?.episodeIndex,
+    guestProgressSnapshot?.episodeLink,
+    guestProgressSnapshot?.progressTime,
     resolveDefaultEpisodeLink,
     user,
   ]);
