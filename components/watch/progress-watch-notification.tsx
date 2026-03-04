@@ -10,37 +10,40 @@ export default function ProgresswatchNotification({
 }: {
   isShowMessage: boolean;
   previousWatchProgress: {
-    progressTime: number,
-    progressEpIndex: number,
-    progressEpLink: string
-  },
-  handleAcceptProgressWatch: () => void,
-  handleRejectProgressWatch: () => void,
-  movie: DetailMovie
+    progressTime: number;
+    progressEpIndex: number;
+    progressEpLink: string;
+  };
+  handleAcceptProgressWatch: () => void;
+  handleRejectProgressWatch: () => void;
+  movie: DetailMovie;
 }) {
-    const {progressTime, progressEpIndex} = previousWatchProgress;
-    
-    const renderCurrentEpisode= () => {
-      if (movie.episodes[0].server_data.length === 1) return;
+  const { progressTime, progressEpIndex } = previousWatchProgress;
+  const episodeServers = Array.isArray(movie.episodes) ? movie.episodes : [];
+  const firstServerEntries = Array.isArray(episodeServers[0]?.server_data) ? episodeServers[0].server_data : [];
 
-      return <span className="font-bold">episode {progressEpIndex + 1}-</span>
-    }
+  const renderCurrentEpisode = () => {
+    if (firstServerEntries.length <= 1) return null;
 
-    return (
+    return <span className="font-bold">episode {progressEpIndex + 1}-</span>;
+  };
+
+  return (
     <div
       className={`fixed top-16 ${
         isShowMessage ? 'right-8' : 'right-[-30rem]'
       }  bg-white z-20 text-black w-96 px-4 py-2 transition-all duration-500 space-y-4`}
     >
       <span className="">
-        The system detected you watched up to{' '}
-        {renderCurrentEpisode()} 
-        {' '}
-        <span className="font-bold">{convertSecondToTime(progressTime)}</span>, do you want to continue watching?
+        The system detected you watched up to {renderCurrentEpisode()} <span className="font-bold">{convertSecondToTime(progressTime)}</span>, do you want to continue watching?
       </span>
       <div className="flex items-center justify-center space-x-10">
-        <button onClick={handleAcceptProgressWatch} className="px-6 py-2 bg-black text-white">Yes</button>
-        <button onClick={handleRejectProgressWatch} className="px-6 py-2 bg-[#5e5e5e] text-white">Watch from start</button>
+        <button onClick={handleAcceptProgressWatch} className="px-6 py-2 bg-black text-white">
+          Yes
+        </button>
+        <button onClick={handleRejectProgressWatch} className="px-6 py-2 bg-[#5e5e5e] text-white">
+          Watch from start
+        </button>
       </div>
     </div>
   );

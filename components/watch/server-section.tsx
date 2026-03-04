@@ -27,7 +27,9 @@ export default function ServerSection({
   handleSetServerIndex,
   handleSetAddonSource,
 }: Props) {
-  const totalServers = movie.episodes.length + streamCandidates.length;
+  const episodeServers = Array.isArray(movie.episodes) ? movie.episodes : [];
+  const safeEpisodeServers = episodeServers.filter((entry) => entry && typeof entry === 'object');
+  const totalServers = safeEpisodeServers.length + streamCandidates.length;
 
   return (
     <div className="container-wrapper-movie px-4 lg:px-0">
@@ -50,9 +52,10 @@ export default function ServerSection({
         </div>
 
         <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {movie.episodes.map((item, index) => {
+          {safeEpisodeServers.map((item, index) => {
             const isActive = activePlaybackSource === 'native' && serverIndex === index;
-            const streamCount = item.server_data.length;
+            const serverData = Array.isArray(item.server_data) ? item.server_data : [];
+            const streamCount = serverData.length;
             const slotLabel =
               streamCount === 1 ? 'Direct stream ready' : `${streamCount} episode entries available`;
 

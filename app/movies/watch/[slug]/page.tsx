@@ -5,28 +5,33 @@ import { Metadata } from 'next';
 import PageParams from 'types/page-params';
 import { redirect } from 'next/navigation';
 
-let movie: DetailMovie;
-
 export async function generateMetadata({ params }: PageParams): Promise<Metadata> {
   try {
-    const res = await MovieServices.getDetailMovie(params.slug);
-    movie = res;
-  } catch (error) {
+    const movie = await MovieServices.getDetailMovie(params.slug);
+    if (!movie?.movie?.name) throw new Error('Invalid movie payload');
+
+    return {
+      title: `Watch ${movie.movie.name}`,
+      description: movie.movie.content || '',
+    };
+  } catch {
     redirect('/');
   }
-
-  return {
-    title: `Watch ${movie.movie.name}`,
-    description: movie.movie.content,
-  };
 }
 
 export default async function MovieWatch({ params }: { params: { slug: string } }) {
-  const movie = await MovieServices.getDetailMovie(params.slug);
+  let movie: DetailMovie;
+
+  try {
+    const res = await MovieServices.getDetailMovie(params.slug);
+    if (!res?.movie) throw new Error('Invalid movie payload');
+    movie = res;
+  } catch {
+    redirect(`/movies/${params.slug}`);
+  }
 
   if (movie.movie.episode_current === 'Trailer') {
-    redirect(`/movies/${params.slug}`); // Redirect back to the previous route
-    return null; // Return null as the component won't render
+    redirect(`/movies/${params.slug}`);
   }
 
   return <MovieWatchPage movie={movie} />;
