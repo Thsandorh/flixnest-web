@@ -1,7 +1,7 @@
 'use client';
 import DetailMovie from 'types/detail-movie';
 import VideoPlayer from './video-player';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { isHaveEpisodesMovie } from 'utils/movie-utils';
 import ServerSection from './server-section';
 import ProgresswatchNotification from './progress-watch-notification';
@@ -119,12 +119,17 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
   const stremioTmdbId = String(movie.movie.tmdb?.id || '').trim();
   const stremioSeason = Number(movie.movie.tmdb?.season || 1);
   const guestProgressSnapshot = progress?.progress;
+  const episodes = useMemo(() => (Array.isArray(movie.episodes) ? movie.episodes : []), [movie.episodes]);
+  const activeEpisodeEntries = useMemo(
+    () => episodes[serverIndex]?.server_data || episodes[0]?.server_data || [],
+    [episodes, serverIndex]
+  );
 
   const resolveEpisodeLink = useCallback(
     (targetServerIndex: number, targetEpisodeIndex: number) => {
-      return movie.episodes?.[targetServerIndex]?.server_data?.[targetEpisodeIndex]?.link_m3u8 || '';
+      return episodes?.[targetServerIndex]?.server_data?.[targetEpisodeIndex]?.link_m3u8 || '';
     },
-    [movie.episodes]
+    [episodes]
   );
 
   const resolveDefaultEpisodeLink = useCallback(() => {
@@ -257,6 +262,7 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
 
   const handleSetServerIndex = (index: number) => {
     if (index === serverIndex) return;
+    if (!episodes[index]) return;
 
     setServerIndex(index);
     setEpisodeIndex(0);
@@ -308,15 +314,21 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
   }, [movie.movie._id, progress]);
 
   useEffect(() => {
+    const firstServerIndex = episodes.length > 0 ? 0 : -1;
     setEpisodeIndex(0);
-    void loadEpisodeSource(0, 0);
+    if (firstServerIndex >= 0) {
+      void loadEpisodeSource(firstServerIndex, 0);
+    } else {
+      setEpisodeLink('');
+      setIsResolvingStream(false);
+    }
 
     if (user) {
       void restoreUserWatchProgress(user.id, movie.movie._id);
     }
 
     restoreGuestWatchProgress(initialGuestProgressRef.current);
-  }, [loadEpisodeSource, movie.movie._id, restoreGuestWatchProgress, restoreUserWatchProgress, user]);
+  }, [episodes.length, loadEpisodeSource, movie.movie._id, restoreGuestWatchProgress, restoreUserWatchProgress, user]);
 
   const handleTrackingProgressWatch = useCallback(async () => {
     if (videoRef.current?.currentTime === 0) return;
@@ -355,7 +367,9 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
     };
 
     const blob = new Blob([JSON.stringify(recentMovieData)], { type: 'application/json' });
-    navigator.sendBeacon(withBasePath('/api/movies/store-recent-movie'), blob);
+    if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
+      navigator.sendBeacon(withBasePath('/api/movies/store-recent-movie'), blob);
+    }
   }, [
     dispatch,
     episodeIndex,
@@ -444,7 +458,7 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
     return false;
   };
 
-  const hasMultipleServers = movie.episodes.length + streamCandidates.length > 1;
+  const hasMultipleServers = episodes.length + streamCandidates.length > 1;
 
   return (
     <div className="pt-20 lg:pt-[3.75rem] space-y-6 lg:space-y-10">
@@ -551,11 +565,11 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
         <h1 className="text-xl lg:text-3xl">{movie.movie.name}</h1>
         <h3 className="text-base lg:text-lg text-[#bbb6ae] mt-2">{movie.movie.origin_name}</h3>
       </div>
-      {isHaveEpisodesMovie(movie) && (
+      {isHaveEpisodesMovie(movie) && activeEpisodeEntries.length > 0 && (
         <div className="container-wrapper-movie px-4 lg:px-0">
           <h1 className="text-lg lg:text-xl">Episode list</h1>
           <ul className="flex flex-wrap gap-2 lg:gap-3 mt-4">
-            {movie.episodes[0].server_data.map((ep, index) => (
+            {activeEpisodeEntries.map((ep, index) => (
               <li key={index}>
                 <button
                   type="button"
