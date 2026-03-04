@@ -1,10 +1,10 @@
-import Image from 'next/image';
-import AccountDefaultImg from '../../public/account-default-img.jpg';
 import IComment from 'types/comment';
 import CommentControl from './comment-control';
 import { useEffect, useState } from 'react';
 import firebaseServices from 'services/firebase-services';
 import DetailMovie from 'types/detail-movie';
+
+const DEFAULT_AVATAR = '/account-default-img.jpg';
 
 export default function Comment({
   comment,
@@ -17,6 +17,7 @@ export default function Comment({
 }) {
   const [isCommentEditing, setIsCommentEditing] = useState<boolean>(false);
   const [commentText, setCommentText] = useState<string>('');
+  const [avatarSrc, setAvatarSrc] = useState<string>(DEFAULT_AVATAR);
 
   const handleSubmitEditedComment = async (e: any) => {
     e.preventDefault();
@@ -31,6 +32,15 @@ export default function Comment({
   useEffect(() => {
     setCommentText(comment.text);
   }, [comment.text]);
+
+  useEffect(() => {
+    if (typeof comment.userAvata === 'string' && comment.userAvata.trim()) {
+      setAvatarSrc(comment.userAvata);
+      return;
+    }
+
+    setAvatarSrc(DEFAULT_AVATAR);
+  }, [comment.userAvata]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -53,12 +63,12 @@ export default function Comment({
   return (
     <div className="p-3 rounded-lg shadow-sm">
       <div className="flex items-center space-x-3">
-        <Image
-          src={comment.userAvata || AccountDefaultImg}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={avatarSrc}
           alt="User Profile"
-          className="rounded-full"
-          width={40}
-          height={40}
+          className="rounded-full h-10 w-10 object-cover"
+          onError={() => setAvatarSrc(DEFAULT_AVATAR)}
         />
         <div className="flex flex-row flex-nowrap items-center">
           <p className="font-semibold text-white mr-2">{comment.userName}</p>
