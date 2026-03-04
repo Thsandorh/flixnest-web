@@ -1,12 +1,12 @@
-import Image from 'next/image';
-import AccountDefaultImg from '../../public/account-default-img.jpg';
 import { useAuthModel } from '../context/auth-modal-context';
 import firebaseServices from 'services/firebase-services';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import IComment from 'types/comment';
 import { SetStateAction } from 'react';
 import LoadingSpinerBtn from '../loading/loading-spiner-btn';
 import DetailMovie from 'types/detail-movie';
+
+const DEFAULT_AVATAR = '/account-default-img.jpg';
 
 export default function CommentInput({
   movie,
@@ -20,6 +20,7 @@ export default function CommentInput({
   const [commentText, setCommentText] = useState<string>('');
   const { openAuthModal } = useAuthModel();
   const [isSubmitingComment, setIsSubmitingComment] = useState<boolean>(false);
+  const [avatarSrc, setAvatarSrc] = useState<string>(DEFAULT_AVATAR);
 
   const handleSubmitComment = (e: any) => {
     if (e !== null) e.preventDefault();
@@ -56,27 +57,36 @@ export default function CommentInput({
     setIsSubmitingComment(false);
   };
 
-  const renderUserPhoto = () => {
-    if (authenticatedUser === null) return AccountDefaultImg;
+  useEffect(() => {
+    if (authenticatedUser === null) {
+      setAvatarSrc(DEFAULT_AVATAR);
+      return;
+    }
 
-    if (authenticatedUser.photo === '') return AccountDefaultImg;
+    if (!authenticatedUser.photo || typeof authenticatedUser.photo !== 'string') {
+      setAvatarSrc(DEFAULT_AVATAR);
+      return;
+    }
 
-    return authenticatedUser.photo;
-  };
+    setAvatarSrc(authenticatedUser.photo);
+  }, [authenticatedUser]);
 
   return (
     <div className="mt-4">
       <div className="flex items-center space-x-3 border border-gray-300 rounded-lg px-4 py-3 shadow-sm bg-white">
         <div>
-          <Image
-            src={renderUserPhoto()}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={avatarSrc}
             alt="User Profile"
-            className="cursor-pointer rounded-full"
-            width={40}
-            height={40}
+            className="cursor-pointer rounded-full h-10 w-10 object-cover"
+            onError={() => setAvatarSrc(DEFAULT_AVATAR)}
           />
         </div>
-        <form onSubmit={handleSubmitComment} className='w-full'>
+        <form
+          onSubmit={handleSubmitComment}
+          className="w-full"
+        >
           <input
             type="text"
             placeholder="Write a comment..."
