@@ -66,23 +66,44 @@ const VideoPlayer = forwardRef<HTMLVideoElement, VideoPlayerProps>(
       setHasPlaybackError(false);
 
       if (video) {
-        let sourceAttached = false;
+        const isPlaylist = videoUrl.includes('.m3u8');
+        const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+        const isAndroid = /Android/i.test(ua);
+        const isWebView = /; wv\)|\bwv\b|Version\/\d+\.\d+\s+Chrome\//i.test(ua);
+        const shouldPreferNative = isPlaylist && isAndroid && isWebView;
 
-        if (Hls.isSupported()) {
-          const hls = new Hls();
+        const attachNative = () => {
+          video.src = videoUrl;
+          return true;
+        };
+
+        const attachHls = () => {
+          if (!Hls.isSupported()) return false;
+          const hls = new Hls({
+            enableWorker: false,
+            lowLatencyMode: false,
+          });
           hlsRef.current = hls;
           hls.loadSource(videoUrl);
           hls.attachMedia(video);
-          sourceAttached = true;
-
           hls.on(Hls.Events.ERROR, (_event, data) => {
             if (data?.fatal) {
               handlePlaybackError();
             }
           });
-        } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-          video.src = videoUrl;
-          sourceAttached = true;
+          return true;
+        };
+
+        const nativeSupported = video.canPlayType('application/vnd.apple.mpegurl');
+
+        let sourceAttached = false;
+        if (shouldPreferNative && (nativeSupported || isPlaylist)) {
+          sourceAttached = attachNative();
+        } else {
+          sourceAttached = attachHls();
+          if (!sourceAttached && nativeSupported) {
+            sourceAttached = attachNative();
+          }
         }
 
         if (!sourceAttached) {
