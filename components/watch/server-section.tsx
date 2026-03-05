@@ -1,5 +1,6 @@
 import DetailMovie from 'types/detail-movie';
-import { FaCheck } from 'react-icons/fa6';
+import { FaCheck, FaCrown, FaBolt } from 'react-icons/fa6';
+import Link from 'next/link';
 
 type StreamCandidate = {
   name: string;
@@ -29,7 +30,21 @@ export default function ServerSection({
 }: Props) {
   const episodeServers = Array.isArray(movie.episodes) ? movie.episodes : [];
   const safeEpisodeServers = episodeServers.filter((entry) => entry && typeof entry === 'object');
-  const totalServers = safeEpisodeServers.length + streamCandidates.length;
+
+  // Filter out duplicate or low quality links. Keep up to 2 Nuvio links as free tier examples.
+  // We must map the original index so the parent component gets the correct index for selection.
+  const filteredCandidates = streamCandidates
+    .map((candidate, index) => ({ candidate, originalIndex: index }))
+    .filter(({ candidate }, index, self) => {
+      if (candidate.provider === 'Flix Streams') return true;
+      if (candidate.provider === 'Nuvio') {
+        const nuvioBeforeMe = self.slice(0, index).filter((c) => c.candidate.provider === 'Nuvio').length;
+        return nuvioBeforeMe < 2;
+      }
+      return false;
+    });
+
+  const totalServers = safeEpisodeServers.length + filteredCandidates.length;
 
   return (
     <div className="container-wrapper-movie px-4 lg:px-0">
@@ -51,7 +66,33 @@ export default function ServerSection({
           </div>
         </div>
 
-        <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {/* Promotional Banner */}
+        <div className="mt-6 mb-5 group relative overflow-hidden rounded-2xl border border-rose-500/30 bg-[linear-gradient(135deg,_rgba(225,29,72,0.1),_rgba(159,18,57,0.2))] p-5 shadow-[0_0_30px_rgba(225,29,72,0.15)] transition-all duration-300 hover:border-rose-500/50 hover:shadow-[0_0_40px_rgba(225,29,72,0.25)]">
+          <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(120deg,transparent,rgba(255,255,255,0.1),transparent)] opacity-0 transition-opacity duration-500 group-hover:opacity-100" />
+          <div className="relative flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div className="space-y-2">
+              <div className="inline-flex items-center gap-2 rounded-full border border-rose-500/40 bg-rose-500/20 px-3 py-1 text-xs font-bold uppercase tracking-widest text-rose-200">
+                <FaCrown size={12} className="text-yellow-400" />
+                Flix Streams Premium
+              </div>
+              <h4 className="text-xl font-bold tracking-tight text-white md:text-2xl">
+                Tired of buffering or missing links?
+              </h4>
+              <p className="max-w-xl text-sm leading-relaxed text-rose-100/80 md:text-base">
+                Upgrade to the <span className="font-semibold text-rose-200">Paid Tier</span> for instant access to exclusive 4K servers, zero ads, and ultra-fast playback. Say goodbye to dead links forever.
+              </p>
+            </div>
+            <Link
+              href="/profile?tab=streaming"
+              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-[linear-gradient(135deg,#e11d48,#be123c)] px-6 py-3 font-semibold text-white shadow-lg transition-transform duration-200 hover:scale-105 hover:shadow-rose-500/50"
+            >
+              <FaBolt size={16} className="text-yellow-300" />
+              Get Premium Access
+            </Link>
+          </div>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {safeEpisodeServers.map((item, index) => {
             const isActive = activePlaybackSource === 'native' && serverIndex === index;
             const serverData = Array.isArray(item.server_data) ? item.server_data : [];
@@ -106,8 +147,8 @@ export default function ServerSection({
               </button>
             );
           })}
-          {streamCandidates.map((item, index) => {
-            const isActive = activePlaybackSource === 'addon' && activeStreamIndex === index;
+          {filteredCandidates.map(({ candidate: item, originalIndex }, index) => {
+            const isActive = activePlaybackSource === 'addon' && activeStreamIndex === originalIndex;
             const addonLabel = item.name || `Addon source ${index + 1}`;
             const addonMeta = item.usesManifestProxy ? 'Manifest proxy path' : 'Direct browser stream';
             const addonTitle = item.title.trim();
@@ -120,7 +161,7 @@ export default function ServerSection({
             return (
               <button
                 type="button"
-                onClick={() => handleSetAddonSource(index)}
+                onClick={() => handleSetAddonSource(originalIndex)}
                 className={`group relative overflow-hidden rounded-[1.35rem] border p-4 text-left transition-all duration-200 ${
                   isActive
                     ? 'border-emerald-300/40 bg-[linear-gradient(135deg,_rgba(16,185,129,0.16),_rgba(255,255,255,0.06))] text-white shadow-[0_20px_50px_rgba(16,185,129,0.14)]'

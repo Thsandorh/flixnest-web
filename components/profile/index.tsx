@@ -8,8 +8,9 @@ import PersonalInfo from './personal-info';
 import SecuritySettings from './security-settings';
 import LanguageSettings from './language-settings';
 import SupportContact from './support-contact';
+import StreamingSettings from './streaming-settings';
 
-export type ProfileSection = 'personal' | 'security' | 'language' | 'support';
+export type ProfileSection = 'personal' | 'security' | 'language' | 'support' | 'streaming';
 
 export default function Profile() {
   const user = useSelector((state: RootState) => state.auth.user) as any;
@@ -38,6 +39,8 @@ export default function Profile() {
         return <LanguageSettings />;
       case 'support':
         return <SupportContact />;
+      case 'streaming':
+        return <StreamingSettings />;
       default:
         return <PersonalInfo user={user} />;
     }
@@ -92,6 +95,7 @@ export default function Profile() {
                   { id: 'personal', label: 'Personal information' },
                   { id: 'security', label: 'Security' },
                   { id: 'language', label: 'Language' },
+                  { id: 'streaming', label: 'Streaming Addons' },
                   { id: 'support', label: 'Support' },
                 ].map((item) => {
                   const isActive = activeSection === item.id;
