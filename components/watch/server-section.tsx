@@ -31,18 +31,10 @@ export default function ServerSection({
   const episodeServers = Array.isArray(movie.episodes) ? movie.episodes : [];
   const safeEpisodeServers = episodeServers.filter((entry) => entry && typeof entry === 'object');
 
-  // Filter out duplicate or low quality links. Keep up to 2 Nuvio links as free tier examples.
-  // We must map the original index so the parent component gets the correct index for selection.
-  const filteredCandidates = streamCandidates
-    .map((candidate, index) => ({ candidate, originalIndex: index }))
-    .filter(({ candidate }, index, self) => {
-      if (candidate.provider === 'Flix Streams') return true;
-      if (candidate.provider === 'Nuvio') {
-        const nuvioBeforeMe = self.slice(0, index).filter((c) => c.candidate.provider === 'Nuvio').length;
-        return nuvioBeforeMe < 2;
-      }
-      return false;
-    });
+  const filteredCandidates = streamCandidates.map((candidate, index) => ({
+    candidate,
+    originalIndex: index,
+  }));
 
   const totalServers = safeEpisodeServers.length + filteredCandidates.length;
 
@@ -154,9 +146,7 @@ export default function ServerSection({
             const addonTitle = item.title.trim();
             const providerLabel = item.provider || 'Addon';
             const providerClasses =
-              providerLabel === 'Nuvio'
-                ? 'border-emerald-300/20 bg-emerald-300/12 text-emerald-100'
-                : 'border-sky-300/20 bg-sky-300/12 text-sky-100';
+              'border-sky-300/20 bg-sky-300/12 text-sky-100';
 
             return (
               <button
