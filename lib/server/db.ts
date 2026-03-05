@@ -35,7 +35,6 @@ function initialize(db: Database.Database) {
       salt TEXT NOT NULL,
       created_at TEXT NOT NULL
     );
-
     CREATE TABLE IF NOT EXISTS collections (
       user_id TEXT NOT NULL,
       movie_id TEXT NOT NULL,
@@ -76,6 +75,14 @@ function initialize(db: Database.Database) {
       PRIMARY KEY (user_id, movie_id)
     );
   `);
+
+  try {
+    db.exec(`ALTER TABLE users ADD COLUMN flix_streams_addon_url TEXT;`);
+  } catch (err: any) {
+    if (!err.message.includes('duplicate column name')) {
+      console.error('Error adding column to users table:', err);
+    }
+  }
 }
 
 export function getDb() {
