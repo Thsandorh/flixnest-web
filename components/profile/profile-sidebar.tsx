@@ -2,7 +2,7 @@
 
 import { ProfileSection } from './index';
 import Image from 'next/image';
-import { IoPerson, IoShieldCheckmark, IoLanguage, IoHelpCircle, IoLogOut } from 'react-icons/io5';
+import { IoPerson, IoShieldCheckmark, IoLanguage, IoHelpCircle, IoLogOut, IoGlobeOutline } from 'react-icons/io5';
 import { useDispatch } from 'react-redux';
 import { removeUser } from '../../redux/slices/user-slice';
 import AuthServices from 'services/auth-services';
@@ -20,6 +20,7 @@ const menuItems = [
   { id: 'personal' as ProfileSection, label: 'Personal information', icon: IoPerson },
   { id: 'security' as ProfileSection, label: 'Security', icon: IoShieldCheckmark },
   { id: 'language' as ProfileSection, label: 'Language', icon: IoLanguage },
+  { id: 'streaming' as ProfileSection, label: 'Streaming Addons', icon: IoGlobeOutline },
   { id: 'support' as ProfileSection, label: 'Support', icon: IoHelpCircle },
 ];
 
