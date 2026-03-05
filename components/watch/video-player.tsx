@@ -66,7 +66,7 @@ const VideoPlayer = forwardRef<HTMLVideoElement, VideoPlayerProps>(
       setHasPlaybackError(false);
 
       if (video) {
-        const isPlaylist = videoUrl.includes('.m3u8');
+        const isPlaylist = videoUrl.toLowerCase().includes('.m3u8');
         const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
         const isAndroid = /Android/i.test(ua);
         const isWebView = /; wv\)|\bwv\b|Version\/\d+\.\d+\s+Chrome\//i.test(ua);
@@ -97,7 +97,9 @@ const VideoPlayer = forwardRef<HTMLVideoElement, VideoPlayerProps>(
         const nativeSupported = video.canPlayType('application/vnd.apple.mpegurl');
 
         let sourceAttached = false;
-        if (shouldPreferNative && (nativeSupported || isPlaylist)) {
+        if (!isPlaylist) {
+          sourceAttached = attachNative();
+        } else if (shouldPreferNative && (nativeSupported || isPlaylist)) {
           sourceAttached = attachNative();
         } else {
           sourceAttached = attachHls();
