@@ -11,6 +11,27 @@ type VideoPlayerProps = {
   onPlaybackError?: () => boolean | void;
 };
 
+
+const isPlaylistLikeUrl = (candidateUrl: string) => {
+  const normalized = String(candidateUrl || '').trim();
+  if (!normalized) return false;
+
+  try {
+    const parsed = new URL(normalized, 'http://localhost');
+    const pathname = parsed.pathname.toLowerCase();
+    const queryUrl = parsed.searchParams.get('url') || '';
+
+    return (
+      pathname.includes('.m3u8') ||
+      pathname.includes('/playlist') ||
+      queryUrl.toLowerCase().includes('.m3u8')
+    );
+  } catch {
+    const lowered = normalized.toLowerCase();
+    return lowered.includes('.m3u8') || lowered.includes('/playlist');
+  }
+};
+
 const VideoPlayer = forwardRef<HTMLVideoElement, VideoPlayerProps>(
   ({ videoUrl, thumbnail, videoProgress, onPlaybackError }, videoRef) => {
     const overlay = useRef<HTMLDivElement | null>(null);
@@ -66,7 +87,7 @@ const VideoPlayer = forwardRef<HTMLVideoElement, VideoPlayerProps>(
       setHasPlaybackError(false);
 
       if (video) {
-        const isPlaylist = videoUrl.includes('.m3u8');
+        const isPlaylist = isPlaylistLikeUrl(videoUrl);
         const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
         const isAndroid = /Android/i.test(ua);
         const isWebView = /; wv\)|\bwv\b|Version\/\d+\.\d+\s+Chrome\//i.test(ua);
@@ -97,7 +118,9 @@ const VideoPlayer = forwardRef<HTMLVideoElement, VideoPlayerProps>(
         const nativeSupported = video.canPlayType('application/vnd.apple.mpegurl');
 
         let sourceAttached = false;
-        if (shouldPreferNative && (nativeSupported || isPlaylist)) {
+        if (!isPlaylist) {
+          sourceAttached = attachNative();
+        } else if (shouldPreferNative && (nativeSupported || isPlaylist)) {
           sourceAttached = attachNative();
         } else {
           sourceAttached = attachHls();
