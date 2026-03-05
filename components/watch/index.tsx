@@ -61,6 +61,12 @@ const toPlaybackUrl = (candidateUrl: string, proxyHeaders?: ProxyHeaders) => {
   return withBasePath(`/api/media/playlist?${params.toString()}`);
 };
 
+
+const isVidzeeLikeStream = (candidate: { provider?: string; name?: string; title?: string; url?: string }) => {
+  const fingerprint = `${candidate.provider || ''} ${candidate.name || ''} ${candidate.title || ''} ${candidate.url || ''}`.toLowerCase();
+  return fingerprint.includes('vidzee');
+};
+
 const extractProxyHeaders = (raw: any): ProxyHeaders | undefined => {
   const requestHeaders = raw?.behaviorHints?.proxyHeaders?.request;
   if (!requestHeaders || typeof requestHeaders !== 'object') return undefined;
@@ -166,13 +172,20 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
             if (!url) return null;
 
             const proxyHeaders = extractProxyHeaders(item?.raw);
-            const usesManifestProxy = isPlaylistLikeUrl(url);
+            const provider = String(item?.provider || '');
+            const streamName = String(item?.name || '');
+            const streamTitle = String(item?.raw?.title || '');
+            if (!isVidzeeLikeStream({ provider, name: streamName, title: streamTitle, url })) {
+              return null;
+            }
+
+            const usesManifestProxy = isPlaylistLikeUrl(url) && Boolean(proxyHeaders);
 
             return {
-              url: toPlaybackUrl(url, proxyHeaders),
-              name: String(item?.name || ''),
-              title: String(item?.raw?.title || ''),
-              provider: String(item?.provider || ''),
+              url: usesManifestProxy ? toPlaybackUrl(url, proxyHeaders) : url,
+              name: streamName,
+              title: streamTitle,
+              provider,
               usesManifestProxy,
               hasProxyHeaders: Boolean(proxyHeaders),
             };

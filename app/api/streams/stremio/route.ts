@@ -22,8 +22,8 @@ type AddonConfig = {
   usesPrimaryAuth: boolean;
 };
 
-const DEFAULT_NUVIO_ADDON_BASE_URL =
-  'https://nuviostreams.hayd.uk/providers=vidzee,vidsrc,vixsrc/manifest.json';
+const DEFAULT_FREE_TIER_ADDON_BASE_URL =
+  'https://flixnest.app/flix-streams/eyJlbmFibGVfYW5pbWVhdjEiOmZhbHNlLCJlbmFibGVfYW5pd2F5cyI6ZmFsc2UsImVuYWJsZV9hdXRvZW1iZWQiOmZhbHNlLCJlbmFibGVfY2luZWJ5IjpmYWxzZSwiZW5hYmxlX2VlMyI6ZmFsc2UsImVuYWJsZV9mcmVlbGl2ZXNwb3J0cyI6ZmFsc2UsImVuYWJsZV9oaWFuaW1lIjpmYWxzZSwiZW5hYmxlX2hvbGx5bW92aWVoZCI6ZmFsc2UsImVuYWJsZV9raXNza2giOmZhbHNlLCJlbmFibGVfbGlicmVmdXRib2wiOmZhbHNlLCJlbmFibGVfbGl2ZXR2X3N4IjpmYWxzZSwiZW5hYmxlX3JpdmVzdHJlYW0iOmZhbHNlLCJlbmFibGVfc3VwZXJlbWJlZCI6ZmFsc2UsImVuYWJsZV90ZWxlZ3JhbSI6ZmFsc2UsImVuYWJsZV92YWRhcGF2IjpmYWxzZSwiZW5hYmxlX3ZpZHplZSI6dHJ1ZSwiZW5hYmxlX3ZpeHNyYyI6ZmFsc2UsImVuYWJsZV93eXppZSI6dHJ1ZSwiZmFtZWxhY2tfY291bnRyaWVzIjpbInVzIl0sInN1cHBvcnRlcl90b2tlbiI6IiIsInd5emllX2FwcGx5X3RvX2FuaXdheXNfaWRzIjp0cnVlLCJ3eXppZV9mb3JtYXRzIjpbInNydCIsImFzcyJdLCJ3eXppZV9oZWFyaW5nX2ltcGFpcmVkIjpmYWxzZSwid3l6aWVfbGFuZ3VhZ2VzIjpbImVuIl0sInd5emllX21heF9yZXN1bHRzIjo4LCJ3eXppZV9zb3VyY2UiOiJhbGwifQ/manifest.json';
 
 const isLikelyPlayable = async (url: string, timeoutMs = 5000) => {
   const controller = new AbortController();
@@ -119,34 +119,21 @@ const normalizeAddonStreamUrl = (rawUrl: string, addonBaseUrl: string) => {
 };
 
 const buildAddonConfigs = (primaryAddonBaseUrl: string | undefined) => {
-  const rawExtraBaseUrls = String(process.env.STREMIO_ADDON_BASE_URLS || '')
-    .split(/[\n,]/)
-    .map((item) => item.trim())
-    .filter(Boolean);
+  const normalizedPrimary = primaryAddonBaseUrl?.trim()
+    ? normalizeAddonBaseUrl(primaryAddonBaseUrl)
+    : '';
+  const fallbackBaseUrl = normalizeAddonBaseUrl(DEFAULT_FREE_TIER_ADDON_BASE_URL);
+  const baseUrl = normalizedPrimary || fallbackBaseUrl;
 
-  const rawCandidates = [
-    primaryAddonBaseUrl?.trim() || '',
-    ...rawExtraBaseUrls,
-    DEFAULT_NUVIO_ADDON_BASE_URL,
-  ].filter(Boolean);
-
-  const seen = new Set<string>();
-  const primaryNormalized = primaryAddonBaseUrl ? normalizeAddonBaseUrl(primaryAddonBaseUrl) : '';
-
-  return rawCandidates
-    .map((rawBaseUrl, index) => {
-      const normalizedBaseUrl = normalizeAddonBaseUrl(rawBaseUrl);
-      if (seen.has(normalizedBaseUrl)) return null;
-      seen.add(normalizedBaseUrl);
-
-      return {
-        baseUrl: normalizedBaseUrl,
-        displayName: index === 0 && primaryNormalized === normalizedBaseUrl ? 'Flix Streams' : 'Nuvio',
-        usesPrimaryAuth: Boolean(primaryNormalized && normalizedBaseUrl === primaryNormalized),
-      } satisfies AddonConfig;
-    })
-    .filter((item): item is AddonConfig => item !== null);
+  return [
+    {
+      baseUrl,
+      displayName: normalizedPrimary ? 'Flix Streams' : 'Flix Streams Free',
+      usesPrimaryAuth: Boolean(normalizedPrimary),
+    } satisfies AddonConfig,
+  ];
 };
+
 
 export async function GET(request: NextRequest) {
   try {
