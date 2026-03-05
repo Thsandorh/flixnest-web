@@ -169,10 +169,7 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
             const provider = String(item?.provider || '');
             const streamName = String(item?.name || '');
             const streamTitle = String(item?.raw?.title || '');
-            const vixsrcFingerprint = `${provider} ${streamName} ${streamTitle} ${url}`.toLowerCase();
-            const isVixsrcStream = vixsrcFingerprint.includes('vixsrc');
-            const shouldBypassManifestProxy = isVixsrcStream && !proxyHeaders;
-            const usesManifestProxy = isPlaylistLikeUrl(url) && !shouldBypassManifestProxy;
+            const usesManifestProxy = isPlaylistLikeUrl(url) && Boolean(proxyHeaders);
 
             return {
               url: usesManifestProxy ? toPlaybackUrl(url, proxyHeaders) : url,
