@@ -1,35 +1,66 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { IoGlobeOutline, IoCheckmark, IoKeyOutline } from 'react-icons/io5';
+import { IoGlobeOutline, IoCheckmark } from 'react-icons/io5';
 import { toast } from 'react-toastify';
+import { useSelector } from 'react-redux';
+import Link from 'next/link';
 import LoadingSpinerBtn from '../loading/loading-spiner-btn';
 
 export default function StreamingSettings() {
   const [addonUrl, setAddonUrl] = useState('');
-  const [supporterToken, setSupporterToken] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const user = useSelector((state: any) => state.auth.user);
 
   useEffect(() => {
-    // Load existing settings if available in localStorage
-    const savedUrl = localStorage.getItem('flix-streams-addon-url');
-    const savedToken = localStorage.getItem('flix-streams-token');
-    if (savedUrl) setAddonUrl(savedUrl);
-    if (savedToken) setSupporterToken(savedToken);
-  }, []);
+    const fetchSettings = async () => {
+      if (!user?.id) return;
+      try {
+        const res = await fetch(`/api/users/me/flix-streams?userId=${user.id}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.addonUrl) {
+            setAddonUrl(data.addonUrl);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load streaming settings:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchSettings();
+  }, [user]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!user?.id) {
+      toast.error('You must be logged in to save settings.');
+      return;
+    }
+
     setIsSaving(true);
 
-    // Simulate API delay
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    try {
+      const res = await fetch('/api/users/me/flix-streams', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, addonUrl }),
+      });
 
-    localStorage.setItem('flix-streams-addon-url', addonUrl);
-    localStorage.setItem('flix-streams-token', supporterToken);
-
-    toast.success('Streaming Addon configuration saved successfully.');
-    setIsSaving(false);
+      if (res.ok) {
+        toast.success('Streaming Addon configuration saved securely.');
+      } else {
+        const errorData = await res.json();
+        toast.error(errorData.message || 'Failed to save settings.');
+      }
+    } catch (error) {
+      toast.error('An error occurred while saving.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -41,10 +72,17 @@ export default function StreamingSettings() {
 
       <div className="mb-6 space-y-2">
         <p className="text-gray-400">
-          Configure your personal Flix Streams Addon URL and Supporter Token to enhance your streaming experience across the platform.
+          Configure your personal Flix Streams Addon URL to enhance your streaming experience.
+          The Supporter token is automatically included within the generated manifest URL.
         </p>
         <div className="inline-flex items-center gap-2 rounded-full border border-rose-500/40 bg-rose-500/10 px-3 py-1 text-xs font-semibold text-rose-300">
           Unlock 4K, Zero Ads, Ultra-fast servers
+        </div>
+        <div className="mt-2 text-sm text-sky-400">
+          <Link href="https://flixnest.app/flix-stream" target="_blank" rel="noopener noreferrer" className="hover:underline flex items-center gap-1">
+            <IoGlobeOutline size={16} />
+            Learn more and get your token at flixnest.app/flix-stream
+          </Link>
         </div>
       </div>
 
@@ -69,29 +107,6 @@ export default function StreamingSettings() {
           </div>
           <p className="text-xs text-gray-500">
             Enter the base URL or manifest.json URL for your custom Stremio addon.
-          </p>
-        </div>
-
-        {/* Supporter Token */}
-        <div className="space-y-2">
-          <label htmlFor="supporterToken" className="block text-sm font-medium text-gray-300">
-            Supporter Token
-          </label>
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <IoKeyOutline className="text-gray-500" />
-            </div>
-            <input
-              type="password"
-              id="supporterToken"
-              value={supporterToken}
-              onChange={(e) => setSupporterToken(e.target.value)}
-              placeholder="Enter your premium access token"
-              className="w-full pl-10 p-3 border border-gray-600 bg-black/50 text-white focus:outline-none focus:border-custome-red focus:ring-1 focus:ring-custome-red rounded-lg transition-colors"
-            />
-          </div>
-          <p className="text-xs text-gray-500">
-            Used to authenticate premium streams. Get this from your provider dashboard.
           </p>
         </div>
 
@@ -121,7 +136,7 @@ export default function StreamingSettings() {
         <p className="text-gray-400 text-sm relative z-10">
           By configuring your own stream addons, you override the default servers with your private sources.
           This means significantly better performance, more 4K options, and a seamless ad-free experience.
-          Settings are saved securely in your browser.
+          Settings are saved securely and encrypted in our database.
         </p>
       </div>
     </div>
