@@ -102,12 +102,12 @@ function rewritePlaylist(content: string, playlistUrl: string, request: NextRequ
     }
 
     if (expectSegmentUri) {
-      rewritten.push(absoluteUrl);
+      rewritten.push(rawLine);
       expectSegmentUri = false;
       continue;
     }
 
-    rewritten.push(absoluteUrl);
+    rewritten.push(rawLine);
   }
 
   return rewritten.join('\n');

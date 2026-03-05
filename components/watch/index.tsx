@@ -166,13 +166,16 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
             if (!url) return null;
 
             const proxyHeaders = extractProxyHeaders(item?.raw);
-            const usesManifestProxy = isPlaylistLikeUrl(url);
+            const provider = String(item?.provider || '');
+            const streamName = String(item?.name || '');
+            const streamTitle = String(item?.raw?.title || '');
+            const usesManifestProxy = isPlaylistLikeUrl(url) && Boolean(proxyHeaders);
 
             return {
-              url: toPlaybackUrl(url, proxyHeaders),
-              name: String(item?.name || ''),
-              title: String(item?.raw?.title || ''),
-              provider: String(item?.provider || ''),
+              url: usesManifestProxy ? toPlaybackUrl(url, proxyHeaders) : url,
+              name: streamName,
+              title: streamTitle,
+              provider,
               usesManifestProxy,
               hasProxyHeaders: Boolean(proxyHeaders),
             };
