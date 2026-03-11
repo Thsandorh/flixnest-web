@@ -326,12 +326,13 @@ const buildBaseMovie = (overrides: Record<string, any>) => ({
     season: Number(overrides.tmdb?.season || 1),
     seasons: Array.isArray(overrides.tmdb?.seasons)
       ? overrides.tmdb.seasons
-          .map((season: any) => ({
+          .map((season: { season?: number; season_number?: number; name?: string; episode_count?: number }) => ({
+            // Local detail payloads use "season", while TMDB season responses use "season_number".
             season: Number(season?.season || season?.season_number || 0),
             name: String(season?.name || ''),
             episode_count: Number(season?.episode_count || 0),
           }))
-          .filter((season: any) => season.season > 0 && season.episode_count > 0)
+          .filter(isPlayableSeason)
       : [],
     vote_average: Number(overrides.tmdb?.vote_average || 0),
     vote_count: Number(overrides.tmdb?.vote_count || 0),
@@ -381,6 +382,14 @@ const buildSingleEpisodeList = () => [
     ],
   },
 ];
+
+type PlaybackSeason = {
+  season: number;
+  name: string;
+  episode_count: number;
+};
+
+const isPlayableSeason = (season: PlaybackSeason) => season.season > 0 && season.episode_count > 0;
 
 const buildEmptyDetail = (slug: string) => ({
   movie: buildBaseMovie({
@@ -594,22 +603,17 @@ const buildTmdbDetailMovie = async (mediaType: 'movie' | 'tv', id: number) => {
 
   let seasonNumber = 1;
   let seriesEpisodeCount = 1;
-  let seasonsForPlayback: Array<{ season: number; name: string; episode_count: number }> = [];
+  let seasonsForPlayback: PlaybackSeason[] = [];
 
   if (mediaType === 'tv') {
     seasonsForPlayback = (Array.isArray(detail?.seasons) ? detail.seasons : [])
-      .map((season: any) => ({
+      .map((season: { season_number?: number; name?: string; episode_count?: number }) => ({
         season: Number(season?.season_number || 0),
         name: String(season?.name || ''),
         episode_count: Number(season?.episode_count || 0),
       }))
-      .filter((season: { season: number; episode_count: number }) => season.season > 0 && season.episode_count > 0)
-      .sort(
-        (
-          left: { season: number; episode_count: number },
-          right: { season: number; episode_count: number }
-        ) => left.season - right.season
-      );
+      .filter(isPlayableSeason)
+      .sort((left: PlaybackSeason, right: PlaybackSeason) => left.season - right.season);
 
     const preferredSeason = seasonsForPlayback[0] || null;
 

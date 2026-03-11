@@ -66,6 +66,9 @@ type SeasonOption = {
   episodeCount: number;
 };
 
+// Match the existing episode placeholder cap used by movie-services when it builds TMDB episode lists.
+const MAX_SEASON_EPISODES = 200;
+
 const extractProxyHeaders = (raw: any): ProxyHeaders | undefined => {
   const requestHeaders = raw?.behaviorHints?.proxyHeaders?.request;
   if (!requestHeaders || typeof requestHeaders !== 'object') return undefined;
@@ -124,13 +127,13 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
     const rawSeasons = Array.isArray(movie.movie.tmdb?.seasons) ? movie.movie.tmdb.seasons : [];
 
     return rawSeasons
-      .map((season: any) => ({
+      .map((season: { season?: number; name?: string; episode_count?: number }) => ({
         season: Number(season?.season || 0),
         name: String(season?.name || ''),
         episodeCount: Number(season?.episode_count || 0),
       }))
-      .filter((season) => season.season > 0 && season.episodeCount > 0)
-      .sort((left, right) => left.season - right.season);
+      .filter((season: SeasonOption) => season.season > 0 && season.episodeCount > 0)
+      .sort((left: SeasonOption, right: SeasonOption) => left.season - right.season);
   }, [movie.movie.tmdb?.seasons]);
   const defaultSeasonNumber = tmdbSeasons[0]?.season || Number(movie.movie.tmdb?.season || 1) || 1;
   const [selectedSeasonNumber, setSelectedSeasonNumber] = useState<number>(defaultSeasonNumber);
@@ -145,11 +148,12 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
   );
   const activeEpisodeEntries = useMemo(() => {
     if (stremioType === 'series' && activeSeason) {
-      const safeCount = Math.min(Math.max(activeSeason.episodeCount, 1), 200);
+      const safeCount = Math.min(Math.max(activeSeason.episodeCount, 1), MAX_SEASON_EPISODES);
       return Array.from({ length: safeCount }, (_, index) => ({
         name: String(index + 1),
         slug: `season-${activeSeason.season}-episode-${index + 1}`,
         filename: `Season ${activeSeason.season} Episode ${index + 1}`,
+        // TMDB-backed series fill the playable URL later through addon resolution.
         link_embed: '',
         link_m3u8: '',
       }));

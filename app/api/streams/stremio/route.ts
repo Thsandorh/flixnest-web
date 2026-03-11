@@ -171,6 +171,12 @@ const resolveUserAddonBaseUrl = (userId: string | null) => {
   }
 };
 
+const resolvePrimaryAddonDisplayName = (userAddonBaseUrl: string, envAddonBaseUrl: string | undefined) => {
+  if (userAddonBaseUrl) return 'Your Flix Streams Premium';
+  if (envAddonBaseUrl) return 'Flix Streams Premium';
+  return 'Flix Streams';
+};
+
 
 export async function GET(request: NextRequest) {
   try {
@@ -193,10 +199,11 @@ export async function GET(request: NextRequest) {
 
     const userAddonBaseUrl = resolveUserAddonBaseUrl(userId);
     const envAddonBaseUrl = process.env.STREMIO_ADDON_BASE_URL;
+    const shouldUseEnvAddonAuth = Boolean(!userAddonBaseUrl && envAddonBaseUrl);
     const addonConfigs = buildAddonConfigs(
       userAddonBaseUrl || envAddonBaseUrl,
-      userAddonBaseUrl ? 'Flix Streams Premium' : 'Flix Streams',
-      Boolean(!userAddonBaseUrl && envAddonBaseUrl)
+      resolvePrimaryAddonDisplayName(userAddonBaseUrl, envAddonBaseUrl),
+      shouldUseEnvAddonAuth
     );
     if (addonConfigs.length === 0) {
       return NextResponse.json(

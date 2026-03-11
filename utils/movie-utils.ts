@@ -1,8 +1,9 @@
 import DetailMovie from "types/detail-movie";
+import { TmdbSeason } from "types/tmdb";
 
 export function isHaveEpisodesMovie(movie: DetailMovie) {
     const tmdbSeasons = Array.isArray(movie.movie.tmdb?.seasons) ? movie.movie.tmdb.seasons : [];
-    const tmdbEpisodeCount = tmdbSeasons.reduce((maxCount: number, season: any) => {
+    const tmdbEpisodeCount = tmdbSeasons.reduce((maxCount: number, season: TmdbSeason) => {
         return Math.max(maxCount, Number(season?.episode_count || 0));
     }, 0);
 
