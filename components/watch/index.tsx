@@ -23,8 +23,6 @@ type StreamCandidate = {
 type ActivePlaybackSource = 'native' | 'addon';
 
 type ProxyHeaders = Partial<Record<'referer' | 'origin' | 'user-agent', string>>;
-
-
 type GuestProgressState = {
   id?: string;
   progress?: {
@@ -62,9 +60,10 @@ const toPlaybackUrl = (candidateUrl: string, proxyHeaders?: ProxyHeaders) => {
 };
 
 
-const isVidzeeLikeStream = (candidate: { provider?: string; name?: string; title?: string; url?: string }) => {
-  const fingerprint = `${candidate.provider || ''} ${candidate.name || ''} ${candidate.title || ''} ${candidate.url || ''}`.toLowerCase();
-  return fingerprint.includes('vidzee');
+type SeasonOption = {
+  season: number;
+  name: string;
+  episodeCount: number;
 };
 
 const extractProxyHeaders = (raw: any): ProxyHeaders | undefined => {
@@ -120,16 +119,44 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRequestTokenRef = useRef(0);
+  const episodes = useMemo(() => (Array.isArray(movie.episodes) ? movie.episodes : []), [movie.episodes]);
+  const tmdbSeasons = useMemo<SeasonOption[]>(() => {
+    const rawSeasons = Array.isArray(movie.movie.tmdb?.seasons) ? movie.movie.tmdb.seasons : [];
+
+    return rawSeasons
+      .map((season: any) => ({
+        season: Number(season?.season || 0),
+        name: String(season?.name || ''),
+        episodeCount: Number(season?.episode_count || 0),
+      }))
+      .filter((season) => season.season > 0 && season.episodeCount > 0)
+      .sort((left, right) => left.season - right.season);
+  }, [movie.movie.tmdb?.seasons]);
+  const defaultSeasonNumber = tmdbSeasons[0]?.season || Number(movie.movie.tmdb?.season || 1) || 1;
+  const [selectedSeasonNumber, setSelectedSeasonNumber] = useState<number>(defaultSeasonNumber);
+  const selectedSeasonNumberRef = useRef(defaultSeasonNumber);
   const hasEpisodeSource = String(episodeLink || '').trim().length > 0;
   const stremioType = movie.movie.tmdb?.type === 'tv' ? 'series' : 'movie';
   const stremioTmdbId = String(movie.movie.tmdb?.id || '').trim();
-  const stremioSeason = Number(movie.movie.tmdb?.season || 1);
   const guestProgressSnapshot = progress?.progress;
-  const episodes = useMemo(() => (Array.isArray(movie.episodes) ? movie.episodes : []), [movie.episodes]);
-  const activeEpisodeEntries = useMemo(
-    () => episodes[serverIndex]?.server_data || episodes[0]?.server_data || [],
-    [episodes, serverIndex]
+  const activeSeason = useMemo(
+    () => tmdbSeasons.find((season) => season.season === selectedSeasonNumber) || tmdbSeasons[0] || null,
+    [selectedSeasonNumber, tmdbSeasons]
   );
+  const activeEpisodeEntries = useMemo(() => {
+    if (stremioType === 'series' && activeSeason) {
+      const safeCount = Math.min(Math.max(activeSeason.episodeCount, 1), 200);
+      return Array.from({ length: safeCount }, (_, index) => ({
+        name: String(index + 1),
+        slug: `season-${activeSeason.season}-episode-${index + 1}`,
+        filename: `Season ${activeSeason.season} Episode ${index + 1}`,
+        link_embed: '',
+        link_m3u8: '',
+      }));
+    }
+
+    return episodes[serverIndex]?.server_data || episodes[0]?.server_data || [];
+  }, [activeSeason, episodes, serverIndex, stremioType]);
 
   const resolveEpisodeLink = useCallback(
     (targetServerIndex: number, targetEpisodeIndex: number) => {
@@ -143,7 +170,7 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
   }, [resolveEpisodeLink]);
 
   const fetchAddonCandidates = useCallback(
-    async (targetEpisodeIndex: number): Promise<StreamCandidate[]> => {
+    async (targetEpisodeIndex: number, targetSeasonNumber = selectedSeasonNumberRef.current): Promise<StreamCandidate[]> => {
       if (!stremioTmdbId) return [];
 
       try {
@@ -151,9 +178,12 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
         endpoint.searchParams.set('type', stremioType);
         endpoint.searchParams.set('id', stremioTmdbId);
         endpoint.searchParams.set('tmdbId', stremioTmdbId);
+        if (user?.id) {
+          endpoint.searchParams.set('userId', String(user.id));
+        }
 
         if (stremioType === 'series') {
-          endpoint.searchParams.set('season', String(stremioSeason));
+          endpoint.searchParams.set('season', String(targetSeasonNumber));
           endpoint.searchParams.set('episode', String(targetEpisodeIndex + 1));
         }
 
@@ -175,10 +205,6 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
             const provider = String(item?.provider || '');
             const streamName = String(item?.name || '');
             const streamTitle = String(item?.raw?.title || '');
-            if (!isVidzeeLikeStream({ provider, name: streamName, title: streamTitle, url })) {
-              return null;
-            }
-
             const usesManifestProxy = isPlaylistLikeUrl(url) && Boolean(proxyHeaders);
 
             return {
@@ -225,11 +251,15 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
         return [];
       }
     },
-    [stremioTmdbId, stremioType, stremioSeason]
+    [stremioTmdbId, stremioType, user?.id]
   );
 
   const loadEpisodeSource = useCallback(
-    async (targetServerIndex: number, targetEpisodeIndex: number) => {
+    async (
+      targetServerIndex: number,
+      targetEpisodeIndex: number,
+      targetSeasonNumber = selectedSeasonNumberRef.current
+    ) => {
       const token = ++streamRequestTokenRef.current;
       setIsResolvingStream(true);
       setIsPlaybackBlocked(false);
@@ -244,7 +274,7 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
         setIsResolvingStream(false);
       }
 
-      const addonCandidates = await fetchAddonCandidates(targetEpisodeIndex);
+      const addonCandidates = await fetchAddonCandidates(targetEpisodeIndex, targetSeasonNumber);
       if (token !== streamRequestTokenRef.current) return;
 
       setStreamCandidates(addonCandidates);
@@ -271,6 +301,16 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
     setEpisodeIndex(index);
     setVideoProgress(null);
     void loadEpisodeSource(serverIndex, index);
+  };
+
+  const handleSelectSeason = (seasonNumber: number) => {
+    if (seasonNumber === selectedSeasonNumberRef.current) return;
+
+    selectedSeasonNumberRef.current = seasonNumber;
+    setSelectedSeasonNumber(seasonNumber);
+    setEpisodeIndex(0);
+    setVideoProgress(null);
+    void loadEpisodeSource(serverIndex, 0, seasonNumber);
   };
 
   const handleSetServerIndex = (index: number) => {
@@ -327,10 +367,12 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
   }, [movie.movie._id, progress]);
 
   useEffect(() => {
+    selectedSeasonNumberRef.current = defaultSeasonNumber;
+    setSelectedSeasonNumber(defaultSeasonNumber);
     const firstServerIndex = episodes.length > 0 ? 0 : -1;
     setEpisodeIndex(0);
     if (firstServerIndex >= 0) {
-      void loadEpisodeSource(firstServerIndex, 0);
+      void loadEpisodeSource(firstServerIndex, 0, defaultSeasonNumber);
     } else {
       setEpisodeLink('');
       setIsResolvingStream(false);
@@ -341,7 +383,15 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
     }
 
     restoreGuestWatchProgress(initialGuestProgressRef.current);
-  }, [episodes.length, loadEpisodeSource, movie.movie._id, restoreGuestWatchProgress, restoreUserWatchProgress, user]);
+  }, [
+    defaultSeasonNumber,
+    episodes.length,
+    loadEpisodeSource,
+    movie.movie._id,
+    restoreGuestWatchProgress,
+    restoreUserWatchProgress,
+    user,
+  ]);
 
   const handleTrackingProgressWatch = useCallback(async () => {
     if (videoRef.current?.currentTime === 0) return;
@@ -580,6 +630,28 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
       </div>
       {isHaveEpisodesMovie(movie) && activeEpisodeEntries.length > 0 && (
         <div className="container-wrapper-movie px-4 lg:px-0">
+          {tmdbSeasons.length > 1 && (
+            <div className="mb-4">
+              <h2 className="text-base lg:text-lg font-medium text-white">Season list</h2>
+              <ul className="mt-3 flex flex-wrap gap-2 lg:gap-3">
+                {tmdbSeasons.map((season) => (
+                  <li key={season.season}>
+                    <button
+                      type="button"
+                      className={`tv-action block ${
+                        selectedSeasonNumber === season.season
+                          ? 'border-white/10 bg-[#5E5E5E] text-white'
+                          : 'border-white/10 bg-white text-black hover:bg-[#d3d3d3]'
+                      } px-3 py-1.5 lg:py-2 rounded-md font-semibold text-sm lg:text-base`}
+                      onClick={() => handleSelectSeason(season.season)}
+                    >
+                      {season.name || `Season ${season.season}`}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           <h1 className="text-lg lg:text-xl">Episode list</h1>
           <ul className="flex flex-wrap gap-2 lg:gap-3 mt-4">
             {activeEpisodeEntries.map((ep, index) => (

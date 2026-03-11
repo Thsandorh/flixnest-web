@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getDb } from 'lib/server/db';
+import { decryptFlixStreamsAddonUrl } from 'lib/server/flix-streams';
 
 type StremioStream = {
   url?: string;
@@ -62,6 +64,14 @@ const normalizeAddonBaseUrl = (rawBaseUrl: string) => {
   return trimTrailingSlash(parsed.toString());
 };
 
+const safelyNormalizeAddonBaseUrl = (rawBaseUrl: string) => {
+  try {
+    return normalizeAddonBaseUrl(rawBaseUrl);
+  } catch {
+    return '';
+  }
+};
+
 const buildStreamEndpoint = (baseUrl: string, type: string, id: string) => {
   const cleanBase = trimTrailingSlash(baseUrl);
   return `${cleanBase}/stream/${encodeURIComponent(type)}/${encodeURIComponent(id)}.json`;
@@ -118,20 +128,47 @@ const normalizeAddonStreamUrl = (rawUrl: string, addonBaseUrl: string) => {
   return parsed.toString();
 };
 
-const buildAddonConfigs = (primaryAddonBaseUrl: string | undefined) => {
-  const normalizedPrimary = primaryAddonBaseUrl?.trim()
-    ? normalizeAddonBaseUrl(primaryAddonBaseUrl)
-    : '';
-  const fallbackBaseUrl = normalizeAddonBaseUrl(DEFAULT_FREE_TIER_ADDON_BASE_URL);
-  const baseUrl = normalizedPrimary || fallbackBaseUrl;
+const buildAddonConfigs = (
+  primaryAddonBaseUrl: string | undefined,
+  primaryDisplayName = 'Flix Streams',
+  usesPrimaryAuth = false
+) => {
+  const configs: AddonConfig[] = [];
+  const normalizedPrimary = primaryAddonBaseUrl?.trim() ? safelyNormalizeAddonBaseUrl(primaryAddonBaseUrl) : '';
+  const fallbackBaseUrl = safelyNormalizeAddonBaseUrl(DEFAULT_FREE_TIER_ADDON_BASE_URL);
 
-  return [
-    {
-      baseUrl,
-      displayName: normalizedPrimary ? 'Flix Streams' : 'Flix Streams Free',
-      usesPrimaryAuth: Boolean(normalizedPrimary),
-    } satisfies AddonConfig,
-  ];
+  if (normalizedPrimary) {
+    configs.push({
+      baseUrl: normalizedPrimary,
+      displayName: primaryDisplayName,
+      usesPrimaryAuth,
+    });
+  }
+
+  if (fallbackBaseUrl && configs.every((config) => config.baseUrl !== fallbackBaseUrl)) {
+    configs.push({
+      baseUrl: fallbackBaseUrl,
+      displayName: 'Flix Streams Free',
+      usesPrimaryAuth: false,
+    });
+  }
+
+  return configs;
+};
+
+const resolveUserAddonBaseUrl = (userId: string | null) => {
+  if (!userId) return '';
+
+  try {
+    const db = getDb();
+    const user = db.prepare('SELECT flix_streams_addon_url FROM users WHERE id = ?').get(String(userId)) as
+      | { flix_streams_addon_url: string | null }
+      | undefined;
+
+    return decryptFlixStreamsAddonUrl(user?.flix_streams_addon_url || '').trim();
+  } catch {
+    return '';
+  }
 };
 
 
@@ -145,6 +182,7 @@ export async function GET(request: NextRequest) {
     const tmdbId = request.nextUrl.searchParams.get('tmdbId');
     const kitsuId = request.nextUrl.searchParams.get('kitsuId');
     const aniwaysId = request.nextUrl.searchParams.get('aniwaysId');
+    const userId = request.nextUrl.searchParams.get('userId');
 
     if (!type || !id) {
       return NextResponse.json(
@@ -153,8 +191,13 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const primaryAddonBaseUrl = process.env.STREMIO_ADDON_BASE_URL;
-    const addonConfigs = buildAddonConfigs(primaryAddonBaseUrl);
+    const userAddonBaseUrl = resolveUserAddonBaseUrl(userId);
+    const envAddonBaseUrl = process.env.STREMIO_ADDON_BASE_URL;
+    const addonConfigs = buildAddonConfigs(
+      userAddonBaseUrl || envAddonBaseUrl,
+      userAddonBaseUrl ? 'Flix Streams Premium' : 'Flix Streams',
+      Boolean(!userAddonBaseUrl && envAddonBaseUrl)
+    );
     if (addonConfigs.length === 0) {
       return NextResponse.json(
         { error: 'Missing addon configuration' },
@@ -253,12 +296,22 @@ export async function GET(request: NextRequest) {
           headers[tokenHeaderName] = token;
         }
 
-        const response = await fetch(endpoint.toString(), {
-          method: 'GET',
-          headers,
-          cache: 'no-store',
-          redirect: 'follow',
-        });
+        let response: Response;
+        try {
+          response = await fetch(endpoint.toString(), {
+            method: 'GET',
+            headers,
+            cache: 'no-store',
+            redirect: 'follow',
+          });
+        } catch (error) {
+          lastError = {
+            status: 0,
+            statusText: 'FETCH_FAILED',
+            body: error instanceof Error ? error.message : 'Unknown fetch error',
+          };
+          continue;
+        }
 
         if (!response.ok) {
           lastError = {
