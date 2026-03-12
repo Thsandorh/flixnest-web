@@ -10,7 +10,8 @@ type AllowedProxyHeaderName = (typeof ALLOWED_PROXY_HEADER_NAMES)[number];
 type AllowedProxyHeaders = Partial<Record<AllowedProxyHeaderName, string>>;
 
 function buildProxyUrl(request: NextRequest, targetUrl: string) {
-  const proxyUrl = new URL(withBasePath('/api/media/playlist'), request.nextUrl.origin);
+  const proxyUrl = new URL('http://proxy.local');
+  proxyUrl.pathname = withBasePath('/api/media/playlist');
   proxyUrl.searchParams.set('url', targetUrl);
 
   const rawHeaders = request.nextUrl.searchParams.get('headers');
@@ -18,7 +19,7 @@ function buildProxyUrl(request: NextRequest, targetUrl: string) {
     proxyUrl.searchParams.set('headers', rawHeaders);
   }
 
-  return proxyUrl.toString();
+  return `${proxyUrl.pathname}${proxyUrl.search}`;
 }
 
 function absolutizeUrl(candidate: string, baseUrl: string) {
