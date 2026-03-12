@@ -19,7 +19,19 @@ export async function generateMetadata({ params }: PageParams): Promise<Metadata
   }
 }
 
-export default async function MovieWatch({ params }: { params: { slug: string } }) {
+const parseSeasonParam = (value: string | string[] | undefined) => {
+  const rawValue = Array.isArray(value) ? value[0] : value;
+  const seasonNumber = Number(rawValue);
+  return Number.isInteger(seasonNumber) && seasonNumber > 0 ? seasonNumber : undefined;
+};
+
+export default async function MovieWatch({
+  params,
+  searchParams,
+}: {
+  params: { slug: string };
+  searchParams?: { season?: string | string[] };
+}) {
   let movie: DetailMovie;
 
   try {
@@ -34,5 +46,5 @@ export default async function MovieWatch({ params }: { params: { slug: string } 
     redirect(`/movies/${params.slug}`);
   }
 
-  return <MovieWatchPage movie={movie} />;
+  return <MovieWatchPage movie={movie} initialSeasonNumber={parseSeasonParam(searchParams?.season)} />;
 }

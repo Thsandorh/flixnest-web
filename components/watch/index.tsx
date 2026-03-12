@@ -94,7 +94,13 @@ const extractProxyHeaders = (raw: any): ProxyHeaders | undefined => {
   return Object.keys(normalized).length > 0 ? normalized : undefined;
 };
 
-export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
+export default function MovieWatchPage({
+  movie,
+  initialSeasonNumber,
+}: {
+  movie: DetailMovie;
+  initialSeasonNumber?: number;
+}) {
   // episodes[serverIndex]: selected server
   // server_data[episodeIndex] || server_data[index]: episode
 
@@ -135,7 +141,11 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
       .filter((season: SeasonOption) => season.season > 0 && season.episodeCount > 0)
       .sort((left: SeasonOption, right: SeasonOption) => left.season - right.season);
   }, [movie.movie.tmdb?.seasons]);
-  const defaultSeasonNumber = tmdbSeasons[0]?.season || Number(movie.movie.tmdb?.season || 1) || 1;
+  const defaultSeasonNumber =
+    tmdbSeasons.find((season) => season.season === initialSeasonNumber)?.season ||
+    tmdbSeasons[0]?.season ||
+    Number(movie.movie.tmdb?.season || 1) ||
+    1;
   const [selectedSeasonNumber, setSelectedSeasonNumber] = useState<number>(defaultSeasonNumber);
   const selectedSeasonNumberRef = useRef(defaultSeasonNumber);
   const hasEpisodeSource = String(episodeLink || '').trim().length > 0;
@@ -682,3 +692,4 @@ export default function MovieWatchPage({ movie }: { movie: DetailMovie }) {
     </div>
   );
 }
+

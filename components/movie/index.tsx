@@ -18,6 +18,21 @@ export default function MoviePage({
   credit: Credit | undefined;
   images: MovieImage[];
 }) {
+  const playableSeasons = (Array.isArray(movie.movie.tmdb?.seasons) ? movie.movie.tmdb.seasons : [])
+    .map((season) => ({
+      season: Number(season?.season || 0),
+      name: String(season?.name || ''),
+      episodeCount: Number(season?.episode_count || 0),
+    }))
+    .filter((season) => season.season > 0 && season.episodeCount > 0)
+    .sort((left, right) => left.season - right.season);
+
+  const hasMultipleSeasons = movie.movie.type === 'series' && playableSeasons.length > 1;
+  const statusLabel =
+    movie.movie.type === 'series' && playableSeasons.length > 1
+      ? `${playableSeasons.length} seasons available`
+      : movie.movie.episode_current;
+
   return (
     <div>
       {/* Desktop Layout */}
@@ -54,7 +69,7 @@ export default function MoviePage({
                 <h4 className="text-2xl text-[#bbb6ae] font-normal mt-2">{`${movie.movie.name} (${movie.movie.year})`}</h4>
               </div>
               <div className="space-y-5">
-                <div>Status: {movie.movie.episode_current}</div>
+                <div>Status: {statusLabel}</div>
                 <div>Duration: {movie.movie.time}</div>
                 <div className="px-3 py-1 bg-[#169f3a] inline-block rounded-md font-semibold">
                   {movie.movie.quality}
@@ -87,6 +102,22 @@ export default function MoviePage({
                     ))}
                   </div>
                 </div>
+                {hasMultipleSeasons && (
+                  <div className="space-y-3">
+                    <div className="text-sm uppercase tracking-wide text-[#bbb6ae]">Choose season</div>
+                    <div className="flex flex-wrap gap-2">
+                      {playableSeasons.map((season) => (
+                        <Link
+                          key={season.season}
+                          className="rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold transition hover:bg-white hover:text-black"
+                          href={`/movies/watch/${movie.movie.slug}?season=${season.season}`}
+                        >
+                          {season.name || `Season ${season.season}`}
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -119,19 +150,17 @@ export default function MoviePage({
 
               {/* Movie Info */}
               <div className="flex-1 min-w-0">
-                <h1 className="text-xl font-bold text-white mb-1 truncate">
-                  {movie.movie.origin_name}
-                </h1>
+                <h1 className="text-xl font-bold text-white mb-1 truncate">{movie.movie.origin_name}</h1>
                 <h2 className="text-base text-gray-300 mb-2 truncate">
                   {movie.movie.name} ({movie.movie.year})
                 </h2>
 
                 {/* Quick Info */}
                 <div className="flex flex-wrap gap-x-3 gap-y-1 text-sm text-gray-300">
-                  <span>{movie.movie.episode_current}</span>
-                  <span>•</span>
+                  <span>{statusLabel}</span>
+                  <span>|</span>
                   <span>{movie.movie.time}</span>
-                  <span>•</span>
+                  <span>|</span>
                   <span className="bg-[#169f3a] px-2 py-0.5 rounded text-white text-xs">
                     {movie.movie.quality}
                   </span>
@@ -184,6 +213,23 @@ export default function MoviePage({
               </Link>
             ))}
           </div>
+
+          {hasMultipleSeasons && (
+            <div className="space-y-3">
+              <div className="text-center text-sm uppercase tracking-wide text-gray-400">Choose season</div>
+              <div className="flex flex-wrap gap-2 justify-center">
+                {playableSeasons.map((season) => (
+                  <Link
+                    key={season.season}
+                    className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-white hover:text-black"
+                    href={`/movies/watch/${movie.movie.slug}?season=${season.season}`}
+                  >
+                    {season.name || `Season ${season.season}`}
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
