@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getDb } from 'lib/server/db';
+import { decryptFlixStreamsAddonUrl } from 'lib/server/flix-streams';
 
 type StremioStream = {
   url?: string;
@@ -22,8 +24,8 @@ type AddonConfig = {
   usesPrimaryAuth: boolean;
 };
 
-const DEFAULT_NUVIO_ADDON_BASE_URL =
-  'https://nuviostreams.hayd.uk/providers=vidzee,vidsrc,vixsrc/manifest.json';
+const DEFAULT_FREE_TIER_ADDON_BASE_URL =
+  'https://flixnest.app/flix-streams/eyJlbmFibGVfYW5pbWVhdjEiOmZhbHNlLCJlbmFibGVfYW5pd2F5cyI6ZmFsc2UsImVuYWJsZV9hdXRvZW1iZWQiOmZhbHNlLCJlbmFibGVfY2luZWJ5IjpmYWxzZSwiZW5hYmxlX2VlMyI6ZmFsc2UsImVuYWJsZV9mcmVlbGl2ZXNwb3J0cyI6ZmFsc2UsImVuYWJsZV9oaWFuaW1lIjpmYWxzZSwiZW5hYmxlX2hvbGx5bW92aWVoZCI6ZmFsc2UsImVuYWJsZV9raXNza2giOmZhbHNlLCJlbmFibGVfbGlicmVmdXRib2wiOmZhbHNlLCJlbmFibGVfbGl2ZXR2X3N4IjpmYWxzZSwiZW5hYmxlX3JpdmVzdHJlYW0iOmZhbHNlLCJlbmFibGVfc3VwZXJlbWJlZCI6ZmFsc2UsImVuYWJsZV90ZWxlZ3JhbSI6ZmFsc2UsImVuYWJsZV92YWRhcGF2IjpmYWxzZSwiZW5hYmxlX3ZpZHplZSI6dHJ1ZSwiZW5hYmxlX3ZpeHNyYyI6ZmFsc2UsImVuYWJsZV93eXppZSI6dHJ1ZSwiZmFtZWxhY2tfY291bnRyaWVzIjpbInVzIl0sInN1cHBvcnRlcl90b2tlbiI6IiIsInd5emllX2FwcGx5X3RvX2FuaXdheXNfaWRzIjp0cnVlLCJ3eXppZV9mb3JtYXRzIjpbInNydCIsImFzcyJdLCJ3eXppZV9oZWFyaW5nX2ltcGFpcmVkIjpmYWxzZSwid3l6aWVfbGFuZ3VhZ2VzIjpbImVuIl0sInd5emllX21heF9yZXN1bHRzIjo4LCJ3eXppZV9zb3VyY2UiOiJhbGwifQ/manifest.json';
 
 const isLikelyPlayable = async (url: string, timeoutMs = 5000) => {
   const controller = new AbortController();
@@ -60,6 +62,14 @@ const normalizeAddonBaseUrl = (rawBaseUrl: string) => {
 
   parsed.pathname = cleanedPath || '/';
   return trimTrailingSlash(parsed.toString());
+};
+
+const safelyNormalizeAddonBaseUrl = (rawBaseUrl: string) => {
+  try {
+    return normalizeAddonBaseUrl(rawBaseUrl);
+  } catch {
+    return '';
+  }
 };
 
 const buildStreamEndpoint = (baseUrl: string, type: string, id: string) => {
@@ -118,35 +128,55 @@ const normalizeAddonStreamUrl = (rawUrl: string, addonBaseUrl: string) => {
   return parsed.toString();
 };
 
-const buildAddonConfigs = (primaryAddonBaseUrl: string | undefined) => {
-  const rawExtraBaseUrls = String(process.env.STREMIO_ADDON_BASE_URLS || '')
-    .split(/[\n,]/)
-    .map((item) => item.trim())
-    .filter(Boolean);
+const buildAddonConfigs = (
+  primaryAddonBaseUrl: string | undefined,
+  primaryDisplayName = 'Flix Streams',
+  usesPrimaryAuth = false
+) => {
+  const configs: AddonConfig[] = [];
+  const normalizedPrimary = primaryAddonBaseUrl?.trim() ? safelyNormalizeAddonBaseUrl(primaryAddonBaseUrl) : '';
+  const fallbackBaseUrl = safelyNormalizeAddonBaseUrl(DEFAULT_FREE_TIER_ADDON_BASE_URL);
 
-  const rawCandidates = [
-    primaryAddonBaseUrl?.trim() || '',
-    ...rawExtraBaseUrls,
-    DEFAULT_NUVIO_ADDON_BASE_URL,
-  ].filter(Boolean);
+  if (normalizedPrimary) {
+    configs.push({
+      baseUrl: normalizedPrimary,
+      displayName: primaryDisplayName,
+      usesPrimaryAuth,
+    });
+  }
 
-  const seen = new Set<string>();
-  const primaryNormalized = primaryAddonBaseUrl ? normalizeAddonBaseUrl(primaryAddonBaseUrl) : '';
+  if (fallbackBaseUrl && configs.every((config) => config.baseUrl !== fallbackBaseUrl)) {
+    configs.push({
+      baseUrl: fallbackBaseUrl,
+      displayName: 'Flix Streams Free',
+      usesPrimaryAuth: false,
+    });
+  }
 
-  return rawCandidates
-    .map((rawBaseUrl, index) => {
-      const normalizedBaseUrl = normalizeAddonBaseUrl(rawBaseUrl);
-      if (seen.has(normalizedBaseUrl)) return null;
-      seen.add(normalizedBaseUrl);
-
-      return {
-        baseUrl: normalizedBaseUrl,
-        displayName: index === 0 && primaryNormalized === normalizedBaseUrl ? 'Flix Streams' : 'Nuvio',
-        usesPrimaryAuth: Boolean(primaryNormalized && normalizedBaseUrl === primaryNormalized),
-      } satisfies AddonConfig;
-    })
-    .filter((item): item is AddonConfig => item !== null);
+  return configs;
 };
+
+const resolveUserAddonBaseUrl = (userId: string | null) => {
+  if (!userId) return '';
+
+  try {
+    const db = getDb();
+    const user = db.prepare('SELECT flix_streams_addon_url FROM users WHERE id = ?').get(String(userId)) as
+      | { flix_streams_addon_url: string | null }
+      | undefined;
+
+    return decryptFlixStreamsAddonUrl(user?.flix_streams_addon_url || '').trim();
+  } catch {
+    return '';
+  }
+};
+
+const resolvePrimaryAddonDisplayName = (userAddonBaseUrl: string, envAddonBaseUrl: string | undefined) => {
+  if (userAddonBaseUrl) return 'Your Flix Streams Premium';
+  if (envAddonBaseUrl) return 'Flix Streams Premium';
+  return 'Flix Streams';
+};
+
 
 export async function GET(request: NextRequest) {
   try {
@@ -158,6 +188,7 @@ export async function GET(request: NextRequest) {
     const tmdbId = request.nextUrl.searchParams.get('tmdbId');
     const kitsuId = request.nextUrl.searchParams.get('kitsuId');
     const aniwaysId = request.nextUrl.searchParams.get('aniwaysId');
+    const userId = request.nextUrl.searchParams.get('userId');
 
     if (!type || !id) {
       return NextResponse.json(
@@ -166,8 +197,14 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const primaryAddonBaseUrl = process.env.STREMIO_ADDON_BASE_URL;
-    const addonConfigs = buildAddonConfigs(primaryAddonBaseUrl);
+    const userAddonBaseUrl = resolveUserAddonBaseUrl(userId);
+    const envAddonBaseUrl = process.env.STREMIO_ADDON_BASE_URL;
+    const shouldUseEnvAddonAuth = Boolean(!userAddonBaseUrl && envAddonBaseUrl);
+    const addonConfigs = buildAddonConfigs(
+      userAddonBaseUrl || envAddonBaseUrl,
+      resolvePrimaryAddonDisplayName(userAddonBaseUrl, envAddonBaseUrl),
+      shouldUseEnvAddonAuth
+    );
     if (addonConfigs.length === 0) {
       return NextResponse.json(
         { error: 'Missing addon configuration' },
@@ -266,12 +303,22 @@ export async function GET(request: NextRequest) {
           headers[tokenHeaderName] = token;
         }
 
-        const response = await fetch(endpoint.toString(), {
-          method: 'GET',
-          headers,
-          cache: 'no-store',
-          redirect: 'follow',
-        });
+        let response: Response;
+        try {
+          response = await fetch(endpoint.toString(), {
+            method: 'GET',
+            headers,
+            cache: 'no-store',
+            redirect: 'follow',
+          });
+        } catch (error) {
+          lastError = {
+            status: 0,
+            statusText: 'FETCH_FAILED',
+            body: error instanceof Error ? error.message : 'Unknown fetch error',
+          };
+          continue;
+        }
 
         if (!response.ok) {
           lastError = {

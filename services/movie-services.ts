@@ -324,6 +324,16 @@ const buildBaseMovie = (overrides: Record<string, any>) => ({
     type: String(overrides.tmdb?.type || 'movie'),
     id: String(overrides.tmdb?.id || ''),
     season: Number(overrides.tmdb?.season || 1),
+    seasons: Array.isArray(overrides.tmdb?.seasons)
+      ? overrides.tmdb.seasons
+          .map((season: { season?: number; season_number?: number; name?: string; episode_count?: number }) => ({
+            // Local detail payloads use "season", while TMDB season responses use "season_number".
+            season: Number(season?.season || season?.season_number || 0),
+            name: String(season?.name || ''),
+            episode_count: Number(season?.episode_count || 0),
+          }))
+          .filter(isPlayableSeason)
+      : [],
     vote_average: Number(overrides.tmdb?.vote_average || 0),
     vote_count: Number(overrides.tmdb?.vote_count || 0),
   },
@@ -372,6 +382,14 @@ const buildSingleEpisodeList = () => [
     ],
   },
 ];
+
+type PlaybackSeason = {
+  season: number;
+  name: string;
+  episode_count: number;
+};
+
+const isPlayableSeason = (season: PlaybackSeason) => season.season > 0 && season.episode_count > 0;
 
 const buildEmptyDetail = (slug: string) => ({
   movie: buildBaseMovie({
@@ -585,27 +603,23 @@ const buildTmdbDetailMovie = async (mediaType: 'movie' | 'tv', id: number) => {
 
   let seasonNumber = 1;
   let seriesEpisodeCount = 1;
+  let seasonsForPlayback: PlaybackSeason[] = [];
 
   if (mediaType === 'tv') {
-    const seasons = Array.isArray(detail?.seasons) ? detail.seasons : [];
-    const preferredSeason =
-      seasons.find((season: any) => Number(season?.season_number) > 0 && Number(season?.episode_count) > 0) ||
-      seasons.find((season: any) => Number(season?.episode_count) > 0) ||
-      null;
+    seasonsForPlayback = (Array.isArray(detail?.seasons) ? detail.seasons : [])
+      .map((season: { season_number?: number; name?: string; episode_count?: number }) => ({
+        season: Number(season?.season_number || 0),
+        name: String(season?.name || ''),
+        episode_count: Number(season?.episode_count || 0),
+      }))
+      .filter(isPlayableSeason)
+      .sort((left: PlaybackSeason, right: PlaybackSeason) => left.season - right.season);
+
+    const preferredSeason = seasonsForPlayback[0] || null;
 
     if (preferredSeason) {
-      seasonNumber = Number(preferredSeason.season_number || 1) || 1;
+      seasonNumber = Number(preferredSeason.season || 1) || 1;
       seriesEpisodeCount = Number(preferredSeason.episode_count || 1) || 1;
-    }
-
-    const seasonDetail = await fetchTmdb(
-      `/tv/${id}/season/${seasonNumber}?language=en-US`,
-      { episodes: [] },
-      'no-store'
-    );
-    const seasonEpisodes = Array.isArray(seasonDetail?.episodes) ? seasonDetail.episodes : [];
-    if (seasonEpisodes.length > 0) {
-      seriesEpisodeCount = seasonEpisodes.length;
     }
   }
 
@@ -657,6 +671,7 @@ const buildTmdbDetailMovie = async (mediaType: 'movie' | 'tv', id: number) => {
       type: mediaType,
       id: String(detail.id),
       season: seasonNumber,
+      seasons: seasonsForPlayback,
       vote_average: Number(detail?.vote_average || 0),
       vote_count: Number(detail?.vote_count || 0),
     },
